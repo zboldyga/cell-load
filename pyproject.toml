@@ -3,9 +3,7 @@ name = "state-load"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
-authors = [
-    { name = "noam teyssier", email = "22600644+noamteyssier@users.noreply.github.com" }
-]
+authors = []
 requires-python = ">=3.13"
 dependencies = []
 
