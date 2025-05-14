@@ -1,41 +1,19 @@
-"""
-PerturbationDataset is used to load perturbation data from h5 files.
-Originally, each file was assumed to contain a single cell type.
-Now, we remove that assumption so that each file (a plate) may contain
-multiple cell types. 
-"""
-
 from typing import Dict, List, Optional, Union, Literal
-import functools
-from collections import defaultdict
-from contextlib import contextmanager
 import torch
 from torch.utils.data import Dataset, Subset
-from ..utils.data_utils import safe_decode_array, H5MetadataCache, GlobalH5MetadataCache
+from ..utils.data_utils import GlobalH5MetadataCache
 import h5py
 import numpy as np
 from pathlib import Path
 import logging
-
-# We import our mapping strategy base class for type hints
 from ..mapping_strategies import BaseMappingStrategy
 
 logger = logging.getLogger(__name__)
 
 class PerturbationDataset(Dataset):
     """
-    Dataset class for loading perturbation data from h5 files.
-
-    Each instance handles a single dataset-cell_type combination. Therefore this class is responsible for
-    serving a single dataset/cell_type pair. Future improvements will also allow for splitting on
-    the perturbation level.
-
-    Currently there are three strategies for mapping basal cells to perturbed cells:
-    - "batch": Basal cells are sampled from the same batch as the perturbed cell
-    - "random": Basal cells are sampled randomly from the same cell type as the perturbed cell
-    - "nearest": Basal cells are sampled from the nearest neighbors of the perturbed cell
-
-    A control cell is always mapped to a perturbed cell within the same dataset and with the same cell type.
+    Dataset class for loading perturbation data from H5 files, handling multiple cell types per plate.
+    Each instance serves a single dataset/cell_type combination, with configurable mapping strategies.
     """
 
     def __init__(
@@ -43,13 +21,13 @@ class PerturbationDataset(Dataset):
         name: str,
         h5_path: Union[str, Path],
         mapping_strategy: BaseMappingStrategy,
-        pert_onehot_map: Optional[Dict[str, int]] = None,
-        batch_onehot_map: Optional[Dict[str, int]] = None,
+        pert_onehot_map: Optional[Dict[str, torch.Tensor]] = None,
+        batch_onehot_map: Optional[Dict[str, torch.Tensor]] = None,
         pert_col: str = "gene",
         cell_type_key: str = "cell_type",
         batch_col: str = "gem_group",
         control_pert: str = "non-targeting",
-        embed_key: Literal["X_uce", "X_pca"] = "X_uce",
+        embed_key: str = "X_hvg",
         store_raw_expression: bool = False,
         random_state: int = 42,
         should_yield_control_cells: bool = True,
@@ -57,24 +35,29 @@ class PerturbationDataset(Dataset):
         **kwargs,
     ):
         """
-        Args:
-            name: Name of the dataset
-            h5_path: Path to the h5 file containing the dataset
-            mapping_strategy: Strategy for mapping basal cells to perturbed cells, one of "batch", "random", "nearest"
-            pert_onehot_map: Global mapping of perturbation names to one-hot encodings or featurizations
-            batch_onehot_map: Global mapping of batch names to one-hot encodings
-            pert_col: Column in the h5 file containing perturbation information
-            cell_type_key: Column in the h5 file containing cell type information
-            batch_col: Column in the h5 file containing batch information
-            control_pert: Name of the control perturbation
-            embed_key: Key in the h5 file containing the expression data, one of "X" or "X_uce"
-            random_state: Random seed for reproducibility
-            pert_tracker: PerturbationTracker instance for tracking valid perturbations
-            should_yield_control_cells: If True, control cells will be included in the dataset
-        """
+            Initialize a perturbation dataset for a specific dataset-celltype.
+
+            Args:
+                name: Identifier for this dataset
+                h5_path: Path to H5 file
+                mapping_strategy: Instance of BaseMappingStrategy to use
+                pert_onehot_map: Optional global pert -> one-hot mapping
+                batch_onehot_map: Optional global batch -> one-hot mapping
+                pert_col: H5 obs column for perturbations
+                cell_type_key: H5 obs column for cell types
+                batch_col: H5 obs column for batches
+                control_pert: Perturbation treated as control
+                embed_key: Key under obsm for embeddings
+                store_raw_expression: If True, include raw gene expression
+                random_state: Seed for reproducibility
+                should_yield_control_cells: Include control cells in output
+                store_raw_basal: If True, include raw basal expression
+                **kwargs: Additional options (e.g. output_space)
+            """
         super().__init__()
         self.name = name
         self.h5_path = Path(h5_path)
+        self.rng = np.random.default_rng(random_state)
         self.mapping_strategy = mapping_strategy
         self.pert_onehot_map = pert_onehot_map
         self.batch_onehot_map = batch_onehot_map
@@ -84,155 +67,123 @@ class PerturbationDataset(Dataset):
         self.control_pert = control_pert
         self.embed_key = embed_key
         self.store_raw_expression = store_raw_expression
-        self.rng = np.random.RandomState(random_state)
         self.should_yield_control_cells = should_yield_control_cells
-        self.should_yield_controls = should_yield_control_cells
         self.store_raw_basal = store_raw_basal
-
-        self.metadata_cache = GlobalH5MetadataCache().get_cache(
-                str(self.h5_path),
-                self.pert_col,
-                self.cell_type_key,
-                self.control_pert,
-                self.batch_col,
-            )
-
-        # Load file
-        self.h5_file = h5py.File(self.h5_path, "r")
-
-        # Use metadata cache for categories (perturbation, cell type, control cells)
-        self.pert_categories = self.metadata_cache.pert_categories
-        self.all_cell_types = self.metadata_cache.cell_type_categories
-        self.control_mask = self.metadata_cache.control_mask
-
-        # Determine the full set of indices in the file
-        self.all_indices = np.arange(self.metadata_cache.n_cells)
-
-        # Store number of genes from the expression matrix (will use in _get_num_genes)
-        self.n_genes = self._get_num_genes()
-
-        # Also track the number of cells (after filtering)
-        self.n_cells = len(self.all_indices)
-
         self.output_space = kwargs.get("output_space", "gene")
 
-        # We'll store the indices for each split.
-        self.split_perturbed_indices = {
-            "train": set(),
-            "train_eval": set(),
-            "val": set(),
-            "test": set(),
-        }
-        self.split_control_indices = {
-            "train": set(),
-            "train_eval": set(),
-            "val": set(),
-            "test": set(),
-        }
+        # Load metadata cache and open file
+        self.metadata_cache = GlobalH5MetadataCache().get_cache(
+            str(self.h5_path), pert_col, cell_type_key, control_pert, batch_col
+        )
+        self.h5_file = h5py.File(self.h5_path, "r")
 
-    def set_store_raw_expression(self, flag: bool):
+        # Cached categories & masks
+        self.pert_categories = self.metadata_cache.pert_categories
+        self.cell_type_categories = self.metadata_cache.cell_type_categories
+        self.control_mask = self.metadata_cache.control_mask
+
+        # Global indices and counts
+        self.all_indices = np.arange(self.metadata_cache.n_cells)
+        self.n_cells = len(self.all_indices)
+        self.n_genes = self._get_num_genes()
+
+        # Initialize split index containers
+        splits = ["train", "train_eval", "val", "test"]
+        self.split_perturbed_indices = {s: set() for s in splits}
+        self.split_control_indices = {s: set() for s in splits}
+
+    def set_store_raw_expression(self, flag: bool) -> None:
         """
-        Dynamically enable/disable whether this dataset yields raw gene expression.
-
-        This is so that we don't load raw expression, which can be expensive, if we are only training
-        latent models.
+        Enable or disable inclusion of raw gene expression in each sample.
         """
         self.store_raw_expression = flag
-        logger.info(f"[{self.name}] to yield raw gene expression: {flag}")
+        logger.info(f"[{self.name}] store_raw_expression set to {flag}")
 
-    def reset_mapping_strategy(self, new_strategy: BaseMappingStrategy, stage="train", **strategy_kwargs):
+    def reset_mapping_strategy(
+        self,
+        strategy_cls: BaseMappingStrategy,
+        stage: str = "train",
+        **strategy_kwargs,
+    ) -> None:
         """
-        Re-run register_split_indices(...) for each known split in this dataset,
-        using the new mapping strategy. This preserves the exact same indices
-        (perturbed + control) but changes how basal controls will be sampled.
+        Replace the current mapping strategy and re-register existing splits.
         """
-        self.mapping_strategy = new_strategy(**strategy_kwargs)
+        self.mapping_strategy = strategy_cls(**strategy_kwargs)
         self.mapping_strategy.stage = stage
-        all_splits = list(self.split_perturbed_indices.keys())
-        for split_name in all_splits:
-            # gather perturbed + control as arrays
-            pert_array = np.array(sorted(list(self.split_perturbed_indices[split_name])))
-            ctrl_array = np.array(sorted(list(self.split_control_indices[split_name])))
-            # call the new strategy’s register
-            if len(pert_array) > 0 and len(ctrl_array) > 0:
-                self.mapping_strategy.register_split_indices(self, split_name, pert_array, ctrl_array)
+        for split, pert_set in self.split_perturbed_indices.items():
+            ctrl_set = self.split_control_indices[split]
+            if pert_set and ctrl_set:
+                pert_arr = np.array(sorted(pert_set))
+                ctrl_arr = np.array(sorted(ctrl_set))
+                self.mapping_strategy.register_split_indices(
+                    self, split, pert_arr, ctrl_arr
+                )
 
     def __getitem__(self, idx: int):
         """
-        Returns a dictionary with:
-            - 'X': the (possibly transformed) expression of the perturbed cell
-            - 'basal': the control cell’s expression as chosen by the mapping strategy
-            - 'pert': the one-hot encoding (or other featurization) for the perturbation
-            - 'pert_name': the perturbation name
-            - 'cell_type': the cell type (from the full array)
-            - 'gem_group': the batch (as an int or string)
-        
-        The index `idx` here is into the filtered set of cells.
+        Fetch a sample (perturbed + mapped control) by filtered index.
+
+        This returns a dictionary with:
+        - X: the expression of the perturbed cell (either in gene space or embedding space)
+        - basal: the control cell’s expression as chosen by the mapping strategy (matching X's space)
+        - pert: the one-hot encoding (or other featurization) for the perturbation
+        - pert_name: the perturbation name
+        - cell_type: the cell type 
+        - gem_group: the batch (as an int or string)
+        - gem_group_name: the batch name (as a string)
+        - X_hvg: the raw gene expression of the perturbed cell (if store_raw_expression is True)
+        - basal_hvg: the raw gene expression of the control cell (if store_raw_basal is True)
         """
-        # Map idx to the underlying file index
-        underlying_idx = int(self.all_indices[idx])
-        split = self._find_split_for_idx(underlying_idx)
-        
-        # Get expression from the h5 file.
-        # For now, we assume the data is stored in "X" (could be counts) and/or in obsm (embed_key)
-        # (It is up to the downstream code to decide whether to use raw gene expression or a precomputed embedding.)
 
-        pert_expr, ctrl_expr, ctrl_idx = self.mapping_strategy.get_mapped_expressions(self, split, underlying_idx)
-        
-        # Get perturbation information using metadata cache
-        pert_code = self.metadata_cache.pert_codes[underlying_idx]
-        pert_name = self.metadata_cache.pert_categories[pert_code]
-        if self.pert_onehot_map is not None:
-            # map across all files to a consistent one hot encoding or featurization
-            pert_onehot = self.pert_onehot_map[pert_name]
-        else:
-            pert_onehot = None
+        # Get the perturbed cell expression, control cell expression, and index of mapped control cell
+        file_idx = int(self.all_indices[idx])
+        split = self._find_split_for_idx(file_idx)
+        pert_expr, ctrl_expr, ctrl_idx = self.mapping_strategy.get_mapped_expressions(
+            self, split, file_idx
+        )
 
-        # Get cell type using metadata cache
-        cell_type_code = self.metadata_cache.cell_type_codes[underlying_idx]
-        cell_type = self.metadata_cache.cell_type_categories[cell_type_code]
+        # Perturbation info
+        pert_code = self.metadata_cache.pert_codes[file_idx]
+        pert_name = self.pert_categories[pert_code]
+        pert_onehot = (
+            self.pert_onehot_map.get(pert_name) if self.pert_onehot_map else None
+        )
 
-        # Get batch information
-        batch_code = self.metadata_cache.batch_codes[underlying_idx]
+        # Cell type info
+        cell_type = self.cell_type_categories[
+            self.metadata_cache.cell_type_codes[file_idx]
+        ]
+
+        # Batch info
+        batch_code = self.metadata_cache.batch_codes[file_idx]
         batch_name = self.metadata_cache.batch_categories[batch_code]
-        if self.batch_onehot_map is not None:
-            # map across all files to a consistent one hot encoding or featurization
-            batch = self.batch_onehot_map[batch_name]
-        else:
-            batch = None
+        batch_onehot = (
+            self.batch_onehot_map.get(batch_name) if self.batch_onehot_map else None
+        )
 
         sample = {
-            "X": pert_expr,  # the perturbed cell’s data
-            "basal": ctrl_expr,   # will be filled in by the mapping strategy
+            "X": pert_expr,
+            "basal": ctrl_expr,
             "pert": pert_onehot,
             "pert_name": pert_name,
             "cell_type": cell_type,
-            "gem_group": batch,
+            "gem_group": batch_onehot,
             "gem_group_name": batch_name,
         }
-        # Optionally, if raw gene expression is needed:
-        # backwards compatibility for old cktps
-        if 'output_space' not in self.__dict__:
-            # for models trained before I added output_space here, infer the output space
-            if pert_expr.shape[0] > 10000:
-                self.output_space = "all"
-            else:
-                self.output_space = "gene"
-            
-        if self.store_raw_expression and self.output_space == 'gene':
-            sample["X_hvg"] = self.fetch_obsm_expression(underlying_idx, 'X_hvg')
-        elif self.store_raw_expression and self.output_space == "all":
-            sample["X_hvg"] = self.fetch_gene_expression(underlying_idx)
 
-        if 'store_raw_basal' in self.__dict__:
-            store_raw_basal = self.store_raw_basal
-        else:
-            store_raw_basal = False
-
-        if store_raw_basal and self.output_space == 'gene':
-            sample["basal_hvg"] = self.fetch_obsm_expression(ctrl_idx, 'X_hvg')
-        elif store_raw_basal and self.output_space == "all":
-            sample["basal_hvg"] = self.fetch_gene_expression(ctrl_idx)
+        # Optionally include raw expressions for the perturbed cell, for training a decoder
+        if self.store_raw_expression:
+            if self.output_space == "gene":
+                sample["X_hvg"] = self.fetch_obsm_expression(file_idx, "X_hvg")
+            elif self.output_space == "all":
+                sample["X_hvg"] = self.fetch_gene_expression(file_idx)
+        
+        # Optionally include raw expressions for the control cell
+        if self.store_raw_basal:
+            if self.output_space == "gene":
+                sample["basal_hvg"] = self.fetch_obsm_expression(ctrl_idx, "X_hvg")
+            elif self.output_space == "all":
+                sample["basal_hvg"] = self.fetch_gene_expression(ctrl_idx)
 
         return sample
 
@@ -252,24 +203,31 @@ class PerturbationDataset(Dataset):
         return self.h5_file[f"obsm/{key}"].shape[1]
 
     def get_cell_type(self, idx):
+        """
+        Get the cell type for a given index.
+        """
         code = self.metadata_cache.cell_type_codes[idx]
         return self.metadata_cache.cell_type_categories[code]
-    
+
     def get_all_cell_types(self, indices):
+        """
+        Get the cell types for all given indices.
+        """
         codes = self.metadata_cache.cell_type_codes[indices]
         return self.metadata_cache.cell_type_categories[codes]
-    
+
     def get_perturbation_name(self, idx):
+        """
+        Get the perturbation name for a given index.
+        """
         pert_code = self.metadata_cache.pert_codes[idx]
         return self.metadata_cache.pert_categories[pert_code]
 
-    # TODO-Abhi: can we move perturbed idx logic and control idx logic internally so these don't have to be passed in?
     def to_subset_dataset(
         self,
         split: str,
         perturbed_indices: np.ndarray,
         control_indices: np.ndarray,
-        subsample_fraction: float = 1.0,
     ) -> Subset:
         """
         Creates a Subset of this dataset that includes only the specified perturbed_indices.
@@ -279,12 +237,7 @@ class PerturbationDataset(Dataset):
             split: Name of the split to create, one of 'train', 'val', 'test', or 'train_eval'
             perturbed_indices: Indices of perturbed cells to include
             control_indices: Indices of control cells to include
-            subsample_fraction: Fraction of perturbed cells to include, the rest are ignored (default 1.0)
         """
-        if subsample_fraction < 1.0:
-            # randomly subsample the perturbed indices
-            n_keep = int(len(perturbed_indices) * subsample_fraction)
-            perturbed_indices = self.rng.choice(perturbed_indices, size=n_keep, replace=False)
 
         # sort them for stable ordering
         perturbed_indices = np.sort(perturbed_indices)
@@ -301,13 +254,28 @@ class PerturbationDataset(Dataset):
             return Subset(self, perturbed_indices)
 
     def fetch_gene_expression(self, idx: int) -> torch.Tensor:
+        """
+        Fetch raw gene counts for a given cell index.
+
+        Supports both CSR‐encoded storage (via `encoding-type = "csr_matrix"`)
+        and dense storage in the 'X' dataset.
+
+        Args:
+            idx: row index in the X matrix
+        Returns:
+            1D FloatTensor of length self.n_genes
+        """
         attrs = dict(self.h5_file["X"].attrs)
         if attrs["encoding-type"] == "csr_matrix":
             indptr = self.h5_file["/X/indptr"]
             start_ptr = indptr[idx]
             end_ptr = indptr[idx + 1]
-            sub_data = torch.tensor(self.h5_file["/X/data"][start_ptr:end_ptr], dtype=torch.float32)
-            sub_indices = torch.tensor(self.h5_file["/X/indices"][start_ptr:end_ptr], dtype=torch.long)
+            sub_data = torch.tensor(
+                self.h5_file["/X/data"][start_ptr:end_ptr], dtype=torch.float32
+            )
+            sub_indices = torch.tensor(
+                self.h5_file["/X/indices"][start_ptr:end_ptr], dtype=torch.long
+            )
             counts = torch.sparse_csr_tensor(
                 torch.tensor([0], dtype=torch.long),
                 sub_indices,
@@ -321,37 +289,55 @@ class PerturbationDataset(Dataset):
         return data
 
     def fetch_obsm_expression(self, idx: int, key: str) -> torch.Tensor:
+        """
+        Fetch a single row from the /obsm/{key} embedding matrix.
+
+        Args:
+            idx: row index in the obsm matrix
+            key: name of the obsm dataset (e.g. "X_uce", "X_hvg")
+        Returns:
+            1D FloatTensor of that embedding
+        """
         row_data = self.h5_file[f"/obsm/{key}"][idx]
         return torch.tensor(row_data, dtype=torch.float32)
 
     def get_gene_names(self) -> List[str]:
         """
-        Get the gene names, which are under adata.var.index, using h5.
-        """
-        try:
-            genes = self.h5_file["var/gene_name"][:].astype(str).tolist()
-        except:
-            try:
-                categories = self.h5_file["var/gene_name/categories"][:].astype(str)
-                codes = self.h5_file["var/gene_name/codes"][:]
-                genes = categories[codes].tolist()
-            except:
-                genes = self.h5_file["var/_index"][:].astype(str).tolist()
+        Return the list of gene names from var/gene_name (or its categorical fallback).
 
-        return genes
+        Tries, in order:
+        1. var/gene_name directly
+        2. var/gene_name/categories + codes
+        3. var/_index as last resort
+        """
+        def _decode(x):
+            return x.decode("utf-8") if isinstance(x, (bytes, bytearray)) else str(x)
+
+        try:
+            raw = self.h5_file["var/gene_name"][:]
+            return [_decode(x) for x in raw]
+        except KeyError:
+            try:
+                cats = self.h5_file["var/gene_name/categories"][:]
+                codes = self.h5_file["var/gene_name/codes"][:]
+                decoded = [_decode(x) for x in cats]
+                return [decoded[i] for i in codes]
+            except KeyError:
+                fallback = self.h5_file["var/_index"][:]
+                return [_decode(x) for x in fallback]
 
     ##############################
     # Static methods
     ##############################
     @staticmethod
-    def collate_fn(batch, transform=False, pert_col="drug", int_counts=False):
+    def collate_fn(batch, int_counts=False):
         """
         Optimized collate function with preallocated lists.
         Safely handles normalization when vectors sum to zero.
         """
         # Get batch size
         batch_size = len(batch)
-        
+
         # Preallocate lists with exact size
         X_list = [None] * batch_size
         basal_list = [None] * batch_size
@@ -360,18 +346,18 @@ class PerturbationDataset(Dataset):
         cell_type_list = [None] * batch_size
         gem_group_list = [None] * batch_size
         gem_group_name_list = [None] * batch_size
-        
+
         # Check if optional fields exist
         has_X_hvg = "X_hvg" in batch[0]
         has_basal_hvg = "basal_hvg" in batch[0]
-        
+
         # Preallocate optional lists if needed
         if has_X_hvg:
             X_hvg_list = [None] * batch_size
-        
+
         if has_basal_hvg:
             basal_hvg_list = [None] * batch_size
-        
+
         # Process all items in a single pass
         for i, item in enumerate(batch):
             X_list[i] = item["X"]
@@ -381,13 +367,13 @@ class PerturbationDataset(Dataset):
             cell_type_list[i] = item["cell_type"]
             gem_group_list[i] = item["gem_group"]
             gem_group_name_list[i] = item["gem_group_name"]
-            
+
             if has_X_hvg:
                 X_hvg_list[i] = item["X_hvg"]
-            
+
             if has_basal_hvg:
                 basal_hvg_list[i] = item["basal_hvg"]
-        
+
         # Create batch dictionary
         batch_dict = {
             "X": torch.stack(X_list),
@@ -398,40 +384,28 @@ class PerturbationDataset(Dataset):
             "gem_group": torch.stack(gem_group_list),
             "gem_group_name": gem_group_name_list,
         }
-        
-        is_tahoe = pert_col == "drug" or pert_col == "drugname_drugconc"
-        
-        # Process X_hvg if present
+
+        # X_hvg is always integer counts
         if has_X_hvg:
             X_hvg = torch.stack(X_hvg_list)
-            
-            if is_tahoe:
-                batch_dict["X_hvg"] = torch.log1p(X_hvg)
-            elif int_counts:
-                batch_dict["X_hvg"] = torch.expm1(X_hvg).round().to(torch.int32)
-            else:
-                batch_dict["X_hvg"] = X_hvg
 
-        # Process basal_hvg if present
+            # if the user specified int_counts argument, then don't log transform
+            if not int_counts:
+                batch_dict["X_hvg"] = torch.log1p(X_hvg)
+
+        # basal_hvg is always integer counts
         if has_basal_hvg:
             basal_hvg = torch.stack(basal_hvg_list)
-            
-            if is_tahoe:
+
+            # if the user specified int_counts argument, then don't log transform
+            if not int_counts:
                 batch_dict["basal_hvg"] = torch.log1p(basal_hvg)
-            else:
-                batch_dict["basal_hvg"] = basal_hvg
-        
-        # Apply transform if provided
-        if transform:
-            batch_dict["X"] = torch.log1p(batch_dict["X"])
-            batch_dict["basal"] = torch.log1p(batch_dict["basal"])
-        
+
         return batch_dict
-    
-    ##############################
-    # Utility methods
-    ##############################
-    def _register_split_indices(self, split: str, perturbed_indices: np.ndarray, control_indices: np.ndarray):
+
+    def _register_split_indices(
+        self, split: str, perturbed_indices: np.ndarray, control_indices: np.ndarray
+    ):
         """
         Register which cell indices belong to the perturbed vs. control set for
         a given split.
@@ -446,12 +420,17 @@ class PerturbationDataset(Dataset):
         self.split_control_indices[split] |= set(control_indices)
 
         # forward these to the mapping strategy
-        self.mapping_strategy.register_split_indices(self, split, perturbed_indices, control_indices)
+        self.mapping_strategy.register_split_indices(
+            self, split, perturbed_indices, control_indices
+        )
 
     def _find_split_for_idx(self, idx: int) -> Optional[str]:
         """Utility to find which split (train/val/test) this idx belongs to."""
         for s in self.split_perturbed_indices.keys():
-            if idx in self.split_perturbed_indices[s] or idx in self.split_control_indices[s]:
+            if (
+                idx in self.split_perturbed_indices[s]
+                or idx in self.split_control_indices[s]
+            ):
                 return s
         return None
 
@@ -474,7 +453,8 @@ class PerturbationDataset(Dataset):
         return n_cols
 
     def get_num_hvgs(self) -> int:
-       return self.h5_file["obsm/X_hvg"].shape[1] 
+        """Return the number of highly variable genes in the obsm matrix."""
+        return self.h5_file["obsm/X_hvg"].shape[1]
 
     def _get_num_cells(self) -> int:
         """Return the total number of cells in the file."""
@@ -495,6 +475,9 @@ class PerturbationDataset(Dataset):
         return self.metadata_cache.pert_names[idx]
 
     def __len__(self) -> int:
+        """
+        Return number of cells in the dataset
+        """
         return self.n_cells
 
     def __getstate__(self):

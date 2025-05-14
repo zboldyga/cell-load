@@ -1,7 +1,7 @@
-from ..data_modules import MultiDatasetPerturbationDataModule
+from ..data_modules import PerturbationDataModule
 
 DATA_MODULE_DICT = dict(
-    MultiDatasetPerturbationDataModule=MultiDatasetPerturbationDataModule,
+    PerturbationDataModule=PerturbationDataModule,
 )
 
 

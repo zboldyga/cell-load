@@ -50,6 +50,8 @@ def parse_dataset_specs(specs: List[str]) -> List[TaskSpec]:
         dataset_parts = dataset_part.split(":")
         dataset = dataset_parts[0]
 
-        parsed_specs.append(TaskSpec(dataset=dataset, cell_type=cell_type, task_type=task_type))
+        parsed_specs.append(
+            TaskSpec(dataset=dataset, cell_type=cell_type, task_type=task_type)
+        )
 
     return parsed_specs
