@@ -8,8 +8,9 @@ import torch
 import h5py
 
 from collections import defaultdict
-from torch.utils.data import Dataset, ConcatDataset, DataLoader
 from lightning.pytorch import LightningDataModule
+from torch.utils.data import Dataset, ConcatDataset, DataLoader
+from tqdm import tqdm
 
 from ..utils.data_utils import generate_onehot_map, safe_decode_array, GlobalH5MetadataCache
 from ..dataset.perturbation_dataset import PerturbationDataset
@@ -100,6 +101,7 @@ class PerturbationDataModule(LightningDataModule):
         self.batch_size = batch_size
         self.num_workers = num_workers
         self.few_shot_percent = few_shot_percent
+        self.random_seed = random_seed
         self.rng = np.random.default_rng(random_seed)
 
         # H5 field names
@@ -116,9 +118,10 @@ class PerturbationDataModule(LightningDataModule):
         self.should_yield_control_cells = should_yield_control_cells
 
         # Optional behaviors
+        self.map_controls = kwargs.get("map_controls", True)
+        self.perturbation_features_file = kwargs.get("perturbation_features_file")
         self.int_counts = kwargs.get("int_counts", False)
         self.normalize_counts = kwargs.get("normalize_counts", False)
-        self.perturbation_features_file = kwargs.get("perturbation_features_file")
         self.store_raw_basal = kwargs.get("store_raw_basal", False)
 
         logger.info(
