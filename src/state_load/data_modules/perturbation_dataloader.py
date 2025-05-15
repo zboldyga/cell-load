@@ -12,7 +12,11 @@ from lightning.pytorch import LightningDataModule
 from torch.utils.data import Dataset, ConcatDataset, DataLoader
 from tqdm import tqdm
 
-from ..utils.data_utils import generate_onehot_map, safe_decode_array, GlobalH5MetadataCache
+from ..utils.data_utils import (
+    generate_onehot_map,
+    safe_decode_array,
+    GlobalH5MetadataCache,
+)
 from ..dataset.perturbation_dataset import PerturbationDataset
 from .samplers import PerturbationBatchSampler
 from .tasks import TaskSpec, TaskType
@@ -37,10 +41,10 @@ class MetadataConcatDataset(ConcatDataset):
         for ds in datasets:
             md = ds.dataset
             if (
-                md.embed_key != self.embed_key or
-                md.control_pert != self.control_pert or
-                md.pert_col != self.pert_col or
-                md.batch_col != self.batch_col
+                md.embed_key != self.embed_key
+                or md.control_pert != self.control_pert
+                or md.pert_col != self.pert_col
+                or md.batch_col != self.batch_col
             ):
                 raise ValueError(
                     "All datasets must share the same embed_key, control_pert, pert_col, and batch_col"
@@ -140,8 +144,10 @@ class PerturbationDataModule(LightningDataModule):
         # Determine if raw expression is needed
         self.store_raw_expression = bool(
             self.embed_key
-            and ((self.embed_key != "X_hvg" and self.output_space == "gene")
-                 or self.output_space == "all")
+            and (
+                (self.embed_key != "X_hvg" and self.output_space == "gene")
+                or self.output_space == "all"
+            )
         )
 
         # Prepare dataset lists and maps
@@ -157,7 +163,6 @@ class PerturbationDataModule(LightningDataModule):
 
         # Initialize global maps
         self._setup_global_maps()
-
 
     def _setup_global_maps(self):
         """
@@ -954,5 +959,3 @@ class PerturbationDataModule(LightningDataModule):
     def get_control_pert(self):
         # Return the control perturbation name
         return self.train_datasets[0].dataset.control_pert
-
-    

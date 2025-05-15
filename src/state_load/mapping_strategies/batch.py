@@ -27,6 +27,7 @@ class BatchMappingStrategy(BaseMappingStrategy):
         }
 
     def name():
+        """Name of the mapping strategy."""
         return "batch"
 
     def register_split_indices(

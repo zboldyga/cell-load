@@ -10,6 +10,7 @@ from ..mapping_strategies import BaseMappingStrategy
 
 logger = logging.getLogger(__name__)
 
+
 class PerturbationDataset(Dataset):
     """
     Dataset class for loading perturbation data from H5 files, handling multiple cell types per plate.
@@ -35,25 +36,25 @@ class PerturbationDataset(Dataset):
         **kwargs,
     ):
         """
-            Initialize a perturbation dataset for a specific dataset-celltype.
+        Initialize a perturbation dataset for a specific dataset-celltype.
 
-            Args:
-                name: Identifier for this dataset
-                h5_path: Path to H5 file
-                mapping_strategy: Instance of BaseMappingStrategy to use
-                pert_onehot_map: Optional global pert -> one-hot mapping
-                batch_onehot_map: Optional global batch -> one-hot mapping
-                pert_col: H5 obs column for perturbations
-                cell_type_key: H5 obs column for cell types
-                batch_col: H5 obs column for batches
-                control_pert: Perturbation treated as control
-                embed_key: Key under obsm for embeddings
-                store_raw_expression: If True, include raw gene expression
-                random_state: Seed for reproducibility
-                should_yield_control_cells: Include control cells in output
-                store_raw_basal: If True, include raw basal expression
-                **kwargs: Additional options (e.g. output_space)
-            """
+        Args:
+            name: Identifier for this dataset
+            h5_path: Path to H5 file
+            mapping_strategy: Instance of BaseMappingStrategy to use
+            pert_onehot_map: Optional global pert -> one-hot mapping
+            batch_onehot_map: Optional global batch -> one-hot mapping
+            pert_col: H5 obs column for perturbations
+            cell_type_key: H5 obs column for cell types
+            batch_col: H5 obs column for batches
+            control_pert: Perturbation treated as control
+            embed_key: Key under obsm for embeddings
+            store_raw_expression: If True, include raw gene expression
+            random_state: Seed for reproducibility
+            should_yield_control_cells: Include control cells in output
+            store_raw_basal: If True, include raw basal expression
+            **kwargs: Additional options (e.g. output_space)
+        """
         super().__init__()
         self.name = name
         self.h5_path = Path(h5_path)
@@ -128,7 +129,7 @@ class PerturbationDataset(Dataset):
         - basal: the control cell’s expression as chosen by the mapping strategy (matching X's space)
         - pert: the one-hot encoding (or other featurization) for the perturbation
         - pert_name: the perturbation name
-        - cell_type: the cell type 
+        - cell_type: the cell type
         - gem_group: the batch (as an int or string)
         - gem_group_name: the batch name (as a string)
         - X_hvg: the raw gene expression of the perturbed cell (if store_raw_expression is True)
@@ -177,7 +178,7 @@ class PerturbationDataset(Dataset):
                 sample["X_hvg"] = self.fetch_obsm_expression(file_idx, "X_hvg")
             elif self.output_space == "all":
                 sample["X_hvg"] = self.fetch_gene_expression(file_idx)
-        
+
         # Optionally include raw expressions for the control cell
         if self.store_raw_basal:
             if self.output_space == "gene":
@@ -310,6 +311,7 @@ class PerturbationDataset(Dataset):
         2. var/gene_name/categories + codes
         3. var/_index as last resort
         """
+
         def _decode(x):
             return x.decode("utf-8") if isinstance(x, (bytes, bytearray)) else str(x)
 
