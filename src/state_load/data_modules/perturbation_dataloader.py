@@ -739,7 +739,7 @@ class PerturbationDataModule(LightningDataModule):
                     train_cts.add(s.cell_type)
         return train_cts
 
-    def setup(self):
+    def setup(self, stage: Optional[str] = None):
         """
         Set up training and test datasets.
         """
