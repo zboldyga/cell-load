@@ -400,8 +400,10 @@ class PerturbationDataset(Dataset):
             frac_ratio = (fracs > 1e-6).float().mean()
             already_logged = frac_ratio > 0.05
 
-            if already_logged: # counts are already log transformed
-                if int_counts: # if the user wants to model with raw counts, don't log transform
+            if already_logged:  # counts are already log transformed
+                if (
+                    int_counts
+                ):  # if the user wants to model with raw counts, don't log transform
                     batch_dict["X_hvg"] = torch.expm1(X_hvg)
                 else:
                     batch_dict["X_hvg"] = X_hvg
@@ -422,8 +424,10 @@ class PerturbationDataset(Dataset):
             frac_ratio = (fracs > 1e-6).float().mean()
             already_logged = frac_ratio > 0.05
 
-            if already_logged: # counts are already log transformed
-                if int_counts: # if the user wants to model with raw counts, don't log transform
+            if already_logged:  # counts are already log transformed
+                if (
+                    int_counts
+                ):  # if the user wants to model with raw counts, don't log transform
                     batch_dict["basal_hvg"] = torch.expm1(basal_hvg)
                 else:
                     batch_dict["basal_hvg"] = basal_hvg
