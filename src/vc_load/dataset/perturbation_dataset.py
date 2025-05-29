@@ -389,21 +389,49 @@ class PerturbationDataset(Dataset):
             "gem_group_name": gem_group_name_list,
         }
 
-        # X_hvg is always integer counts
         if has_X_hvg:
             X_hvg = torch.stack(X_hvg_list)
 
-            # if the user specified int_counts argument, then don't log transform
-            if not int_counts:
-                batch_dict["X_hvg"] = torch.log1p(X_hvg)
+            # AUTO‐DETECT: are these already log1p‐transformed?
+            # compute fractional part
+            fracs = (X_hvg - X_hvg.floor()).abs()
 
-        # basal_hvg is always integer counts
+            # if >1e-6 in more than, say, 1% of entries, we assume log‐counts
+            frac_ratio = (fracs > 1e-6).float().mean()
+            already_logged = frac_ratio > 0.05
+
+            if already_logged: # counts are already log transformed
+                if int_counts: # if the user wants to model with raw counts, don't log transform
+                    batch_dict["X_hvg"] = torch.expm1(X_hvg)
+                else:
+                    batch_dict["X_hvg"] = X_hvg
+            else:
+                if int_counts:
+                    batch_dict["X_hvg"] = X_hvg
+                else:
+                    batch_dict["X_hvg"] = torch.log1p(X_hvg)
+
         if has_basal_hvg:
             basal_hvg = torch.stack(basal_hvg_list)
 
-            # if the user specified int_counts argument, then don't log transform
-            if not int_counts:
-                batch_dict["basal_hvg"] = torch.log1p(basal_hvg)
+            # AUTO‐DETECT: are these already log1p‐transformed?
+            # compute fractional part
+            fracs = (basal_hvg - basal_hvg.floor()).abs()
+
+            # if >1e-6 in more than, say, 1% of entries, we assume log‐counts
+            frac_ratio = (fracs > 1e-6).float().mean()
+            already_logged = frac_ratio > 0.05
+
+            if already_logged: # counts are already log transformed
+                if int_counts: # if the user wants to model with raw counts, don't log transform
+                    batch_dict["basal_hvg"] = torch.expm1(basal_hvg)
+                else:
+                    batch_dict["basal_hvg"] = basal_hvg
+            else:
+                if int_counts:
+                    batch_dict["basal_hvg"] = basal_hvg
+                else:
+                    batch_dict["basal_hvg"] = torch.log1p(basal_hvg)
 
         return batch_dict
 
