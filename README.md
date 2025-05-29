@@ -1,4 +1,4 @@
-# vc-load
+# cell-load
 
 > Dataloaders for state-sets models
 
@@ -8,8 +8,8 @@ Distributed via [`uv`](https://docs.astral.sh/uv).
 
 ```bash
 # Clone repo
-git clone github.com:arcinstitute/vc-load
-cd vc-load
+git clone github.com:arcinstitute/cell-load
+cd cell-load
 
 # Initialize venv
 uv venv
@@ -24,8 +24,8 @@ This package provides a single Lightning‐compatible DataModule, `PerturbationD
 `h5py` instead of loading AnnData's into memory. You can instantiate a `PerturbationDataModule` as:
 
 ```python
-from vc_load.utils.modules import get_datamodule
-from vc_load.data_modules.tasks import TaskSpec, TaskType
+from cell_load.utils.modules import get_datamodule
+from cell_load.data_modules.tasks import TaskSpec, TaskType
 
 # Define training and testing specifications
 train_specs = [
@@ -84,7 +84,7 @@ The dataset should be a subfolder in the data_dir provided above.
 The package provides a utility function to parse dataset specifications from strings. This is particularly useful when passing dataset specifications from command-line arguments or configuration files:
 
 ```python
-from vc_load.data_modules.tasks import parse_dataset_specs
+from cell_load.data_modules.tasks import parse_dataset_specs
 ```
 
 ### Usage in Training Scripts
