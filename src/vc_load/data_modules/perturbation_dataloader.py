@@ -296,6 +296,16 @@ class PerturbationDataModule(LightningDataModule):
                 f"Cell type {ct}: {len(train_perts)} train perts, {len(test_perts)} test perts in {end_time - start_time:.2f} seconds."
             )
 
+    def get_var_names(self):
+        """
+        Get the variable names (gene names) from the first dataset.
+        This assumes all datasets have the same gene names.
+        """
+        if len(self.test_datasets) == 0:
+            raise ValueError("No test datasets available to extract variable names.")
+        underlying_ds: PerturbationDataset = self.test_datasets[0].dataset
+        return underlying_ds.get_gene_names()
+
     def _setup_datasets(self):
         """
         Set up training datasets with proper handling of zeroshot/fewshot splits.
