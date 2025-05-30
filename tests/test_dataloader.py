@@ -58,6 +58,7 @@ def synthetic_data(tmp_path_factory):
             # Create a dummy AnnData (no X needed for these tests)
             adata = ad.AnnData(obs=df)
             adata.obsm["X_hvg"] = np.random.rand(n_cells, emb_dim).astype(np.float32)
+            adata.obsm["X_state"] = np.random.rand(n_cells, emb_dim).astype(np.float32)
 
             # Write directly to .h5 — AnnData will use the same HDF5 layout
             fpath = ds_dir / f"{ct}.h5"
@@ -209,6 +210,27 @@ def test_collate_fn_shapes_and_keys(synthetic_data):
     assert isinstance(batch["X"], torch.Tensor)
     assert batch["X"].shape[0] == 4
     assert batch["X"].ndim == 2
+
+    dm = make_datamodule(
+        root, train_specs, [], embed_key="X_state", batch_size=4, control_pert="P0"
+    )
+    dm.setup()
+    batch = next(iter(dm.train_dataloader()))
+
+    for key in (
+        "pert_cell_emb",
+        "ctrl_cell_emb",
+        "pert_cell_counts",
+        "pert_emb",
+        "pert_name",
+        "cell_type",
+        "batch",
+        "batch_name",
+    ):
+        assert key in batch
+    assert isinstance(batch["pert_cell_emb"], torch.Tensor)
+    assert batch["pert_cell_emb"].shape[0] == 4
+    assert batch["pert_cell_emb"].ndim == 2
 
 
 def test_getitem_basal_matches_control(synthetic_data):
