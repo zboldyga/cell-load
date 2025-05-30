@@ -34,9 +34,6 @@ class BaseMappingStrategy(ABC):
         self.name = name
         self.stage = stage
         self.map_controls = kwargs.get("map_controls", False)
-        print(
-            f"Using {self.name} mapping strategy with {self.map_controls} for map_controls."
-        )
 
     def __setstate__(self, state):
         """
