@@ -125,7 +125,7 @@ class PerturbationDataModule(LightningDataModule):
 
         logger.error(
             f"Initializing DataModule: batch_size={batch_size}, workers={num_workers}, "
-            f"few_shot_percent={few_shot_percent}, random_seed={random_seed}"
+            f"random_seed={random_seed}"
         )
 
         # Mapping strategy
@@ -256,7 +256,7 @@ class PerturbationDataModule(LightningDataModule):
             fewshot_celltypes = self.config.get_fewshot_celltypes(dataset_name)
             is_training_dataset = self.config.training.get(dataset_name) == "train"
 
-            logger.error(f"ABHI Processing dataset {dataset_name}:")
+            logger.error(f"Processing dataset {dataset_name}:")
             logger.error(f"  - Training dataset: {is_training_dataset}")
             logger.error(f"  - Zeroshot cell types: {list(zeroshot_celltypes.keys())}")
             logger.error(f"  - Fewshot cell types: {list(fewshot_celltypes.keys())}")
@@ -311,9 +311,12 @@ class PerturbationDataModule(LightningDataModule):
                     val_sum += counts["val"]
                     test_sum += counts["test"]
 
-                logger.error(
+                tqdm.write(
                     f"Processed {fname}: {train_sum} train, {val_sum} val, {test_sum} test"
                 )
+            
+            logger.error("\n")
+
 
     def _split_fewshot_celltype(
         self,
@@ -398,7 +401,6 @@ class PerturbationDataModule(LightningDataModule):
             for fpath in sorted(dataset_path.glob(ext)):
                 # fpath.stem will already be e.g. "CT0" for "CT0.h5ad" or "CT0.h5"
                 files[fpath.stem] = fpath
-        print("found files: ", files)
         return files
 
     def _process_celltype(
@@ -529,7 +531,7 @@ class PerturbationDataModule(LightningDataModule):
         """
         if len(self.train_datasets) == 0:
             self._setup_datasets()
-            print(
+            logger.error(
                 "Done! Train / Val / Test splits: %d / %d / %d",
                 len(self.train_datasets),
                 len(self.val_datasets),
