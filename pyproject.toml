@@ -1,6 +1,6 @@
 [project]
 name = "cell-load"
-version = "0.2.2"
+version = "0.3.0"
 description = "Dataloaders for training models on huge single-cell datasets"
 readme = "README.md"
 authors = [
@@ -9,7 +9,7 @@ authors = [
     { name = "Noam Teyssier", email = "noam.teyssier@arcinstitute.org" },
 ]
 requires-python = ">=3.10,<3.13"
-dependencies = ["torch>=1.13.0", "anndata>=0.9.1", "lightning>=2.0.0"]
+dependencies = ["torch>=1.13.0", "anndata>=0.9.1", "lightning>=2.0.0", "toml>=0.10.2"]
 
 [build-system]
 requires = ["hatchling"]
