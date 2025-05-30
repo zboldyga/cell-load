@@ -8,7 +8,7 @@ DATA_MODULE_DICT = dict(
 def get_datamodule(name, kwargs, batch_size=None, cell_sentence_len=1):
     """
     Load data/lightning modules using TOML configuration.
-    
+
     Args:
         name: Name of the data module (e.g., 'PerturbationDataModule')
         kwargs: Dictionary containing 'toml_config_path' and other parameters

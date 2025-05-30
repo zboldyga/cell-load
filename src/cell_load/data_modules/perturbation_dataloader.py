@@ -92,11 +92,11 @@ class PerturbationDataModule(LightningDataModule):
             n_basal_samples: Number of control cells to sample per perturbed cell
         """
         super().__init__()
-        
+
         # Load and validate configuration
         self.config = ExperimentConfig.from_toml(toml_config_path)
         self.config.validate()
-        
+
         # Experiment level params
         self.batch_size = batch_size
         self.num_workers = num_workers
@@ -168,7 +168,7 @@ class PerturbationDataModule(LightningDataModule):
         for dataset_name in self.config.get_all_datasets():
             dataset_path = Path(self.config.datasets[dataset_name])
             files = self._find_dataset_files(dataset_path)
-            
+
             for _fname, fpath in files.items():
                 with h5py.File(fpath, "r") as f:
                     pert_arr = f[f"obs/{self.pert_col}/categories"][:]
@@ -195,7 +195,7 @@ class PerturbationDataModule(LightningDataModule):
 
             logger.error(
                 "Loaded custom perturbation featurizations for %d perturbations.",
-                len(featurization_dict)
+                len(featurization_dict),
             )
             self.pert_onehot_map = featurization_dict  # use the custom featurizations
         else:
@@ -213,10 +213,12 @@ class PerturbationDataModule(LightningDataModule):
         underlying_ds: PerturbationDataset = self.test_datasets[0].dataset
         return underlying_ds.get_gene_names()
 
-    def _create_base_dataset(self, dataset_name: str, fpath: Path) -> PerturbationDataset:
+    def _create_base_dataset(
+        self, dataset_name: str, fpath: Path
+    ) -> PerturbationDataset:
         """Create a base PerturbationDataset instance."""
         mapping_kwargs = {"map_controls": self.map_controls}
-        
+
         return PerturbationDataset(
             name=dataset_name,
             h5_path=fpath,
@@ -260,11 +262,16 @@ class PerturbationDataModule(LightningDataModule):
             logger.error(f"  - Fewshot cell types: {list(fewshot_celltypes.keys())}")
 
             # Process each file in the dataset
-            for fname, fpath in tqdm(list(files.items()), desc=f"Processing {dataset_name}"):
+            for fname, fpath in tqdm(
+                list(files.items()), desc=f"Processing {dataset_name}"
+            ):
                 # Create metadata cache
                 cache = GlobalH5MetadataCache().get_cache(
-                    str(fpath), self.pert_col, self.cell_type_key, 
-                    self.control_pert, self.batch_col
+                    str(fpath),
+                    self.pert_col,
+                    self.cell_type_key,
+                    self.control_pert,
+                    self.batch_col,
                 )
 
                 # Create base dataset
@@ -275,125 +282,155 @@ class PerturbationDataModule(LightningDataModule):
                 for ct_idx, ct in enumerate(cache.cell_type_categories):
                     ct_mask = cache.cell_type_codes == ct_idx
                     n_cells = np.sum(ct_mask)
-                    
+
                     if n_cells == 0:
                         continue
-                        
+
                     ct_indices = np.where(ct_mask)[0]
-                    
+
                     # Split into control and perturbed indices
                     ctrl_mask = cache.pert_codes[ct_indices] == cache.control_pert_code
                     ctrl_indices = ct_indices[ctrl_mask]
                     pert_indices = ct_indices[~ctrl_mask]
-                    
+
                     # Determine how to handle this cell type
                     counts = self._process_celltype(
-                        ds, ct, ct_indices, ctrl_indices, pert_indices,
-                        cache, dataset_name, zeroshot_celltypes, 
-                        fewshot_celltypes, is_training_dataset
+                        ds,
+                        ct,
+                        ct_indices,
+                        ctrl_indices,
+                        pert_indices,
+                        cache,
+                        dataset_name,
+                        zeroshot_celltypes,
+                        fewshot_celltypes,
+                        is_training_dataset,
                     )
-                    
-                    train_sum += counts['train']
-                    val_sum += counts['val'] 
-                    test_sum += counts['test']
 
-                logger.error(f"Processed {fname}: {train_sum} train, {val_sum} val, {test_sum} test")
+                    train_sum += counts["train"]
+                    val_sum += counts["val"]
+                    test_sum += counts["test"]
+
+                logger.error(
+                    f"Processed {fname}: {train_sum} train, {val_sum} val, {test_sum} test"
+                )
 
     def _split_fewshot_celltype(
-        self, ds: PerturbationDataset, pert_indices: np.ndarray, 
-        ctrl_indices: np.ndarray, cache, pert_config: Dict[str, List[str]]
+        self,
+        ds: PerturbationDataset,
+        pert_indices: np.ndarray,
+        ctrl_indices: np.ndarray,
+        cache,
+        pert_config: Dict[str, List[str]],
     ) -> Dict[str, int]:
         """Split a fewshot cell type according to perturbation assignments."""
-        counts = {'train': 0, 'val': 0, 'test': 0}
-        
+        counts = {"train": 0, "val": 0, "test": 0}
+
         # Get perturbation codes for this cell type
         pert_codes = cache.pert_codes[pert_indices]
-        
+
         # Create sets of perturbation codes for each split
-        val_pert_names = set(pert_config.get('val', []))
-        test_pert_names = set(pert_config.get('test', []))
-        
+        val_pert_names = set(pert_config.get("val", []))
+        test_pert_names = set(pert_config.get("test", []))
+
         val_pert_codes = set()
         test_pert_codes = set()
-        
+
         for i, pert_name in enumerate(cache.pert_categories):
             if pert_name in val_pert_names:
                 val_pert_codes.add(i)
             if pert_name in test_pert_names:
                 test_pert_codes.add(i)
-        
+
         # Split perturbation indices by their codes
         val_mask = np.isin(pert_codes, list(val_pert_codes))
         test_mask = np.isin(pert_codes, list(test_pert_codes))
         train_mask = ~(val_mask | test_mask)
-        
+
         val_pert_indices = pert_indices[val_mask]
-        test_pert_indices = pert_indices[test_mask]  
+        test_pert_indices = pert_indices[test_mask]
         train_pert_indices = pert_indices[train_mask]
-        
+
         # Split controls proportionally
         rng = np.random.default_rng(self.random_seed)
         ctrl_indices_shuffled = rng.permutation(ctrl_indices)
-        
+
         n_val = len(val_pert_indices)
         n_test = len(test_pert_indices)
         n_train = len(train_pert_indices)
         total_pert = n_val + n_test + n_train
-        
+
         if total_pert > 0:
             n_ctrl_val = int(len(ctrl_indices) * n_val / total_pert)
             n_ctrl_test = int(len(ctrl_indices) * n_test / total_pert)
-            
+
             val_ctrl_indices = ctrl_indices_shuffled[:n_ctrl_val]
-            test_ctrl_indices = ctrl_indices_shuffled[n_ctrl_val:n_ctrl_val + n_ctrl_test]
-            train_ctrl_indices = ctrl_indices_shuffled[n_ctrl_val + n_ctrl_test:]
-            
+            test_ctrl_indices = ctrl_indices_shuffled[
+                n_ctrl_val : n_ctrl_val + n_ctrl_test
+            ]
+            train_ctrl_indices = ctrl_indices_shuffled[n_ctrl_val + n_ctrl_test :]
+
             # Create subsets
             if len(val_pert_indices) > 0:
                 subset = ds.to_subset_dataset("val", val_pert_indices, val_ctrl_indices)
                 self.val_datasets.append(subset)
-                counts['val'] = len(subset)
-                
+                counts["val"] = len(subset)
+
             if len(test_pert_indices) > 0:
-                subset = ds.to_subset_dataset("test", test_pert_indices, test_ctrl_indices)
+                subset = ds.to_subset_dataset(
+                    "test", test_pert_indices, test_ctrl_indices
+                )
                 self.test_datasets.append(subset)
-                counts['test'] = len(subset)
-                
+                counts["test"] = len(subset)
+
             if len(train_pert_indices) > 0:
-                subset = ds.to_subset_dataset("train", train_pert_indices, train_ctrl_indices)
+                subset = ds.to_subset_dataset(
+                    "train", train_pert_indices, train_ctrl_indices
+                )
                 self.train_datasets.append(subset)
-                counts['train'] = len(subset)
-        
+                counts["train"] = len(subset)
+
         return counts
 
     def _find_dataset_files(self, dataset_path: Path) -> Dict[str, Path]:
-        """Find H5 files for a dataset."""
-        files = sorted(dataset_path.glob("*.h5"))
-        return {fpath.stem.split(".")[0]: fpath for fpath in files}
+        files: Dict[str, Path] = {}
+        for ext in ("*.h5", "*.h5ad"):
+            for fpath in sorted(dataset_path.glob(ext)):
+                # fpath.stem will already be e.g. "CT0" for "CT0.h5ad" or "CT0.h5"
+                files[fpath.stem] = fpath
+        print("found files: ", files)
+        return files
 
     def _process_celltype(
-        self, ds: PerturbationDataset, celltype: str, 
-        ct_indices: np.ndarray, ctrl_indices: np.ndarray, pert_indices: np.ndarray,
-        cache, dataset_name: str, zeroshot_celltypes: Dict[str, str],
-        fewshot_celltypes: Dict[str, Dict[str, List[str]]], is_training_dataset: bool
+        self,
+        ds: PerturbationDataset,
+        celltype: str,
+        ct_indices: np.ndarray,
+        ctrl_indices: np.ndarray,
+        pert_indices: np.ndarray,
+        cache,
+        dataset_name: str,
+        zeroshot_celltypes: Dict[str, str],
+        fewshot_celltypes: Dict[str, Dict[str, List[str]]],
+        is_training_dataset: bool,
     ) -> Dict[str, int]:
         """Process a single cell type and return counts for each split."""
-        counts = {'train': 0, 'val': 0, 'test': 0}
-        
+        counts = {"train": 0, "val": 0, "test": 0}
+
         if celltype in zeroshot_celltypes:
             # Zeroshot: all cells go to specified split
             split = zeroshot_celltypes[celltype]
             subset = ds.to_subset_dataset(split, pert_indices, ctrl_indices)
-            
-            if split == 'train':
+
+            if split == "train":
                 self.train_datasets.append(subset)
-            elif split == 'val':
+            elif split == "val":
                 self.val_datasets.append(subset)
-            elif split == 'test':
+            elif split == "test":
                 self.test_datasets.append(subset)
-                
+
             counts[split] = len(subset)
-            
+
         elif celltype in fewshot_celltypes:
             # Fewshot: split perturbations according to config
             pert_config = fewshot_celltypes[celltype]
@@ -402,13 +439,13 @@ class PerturbationDataModule(LightningDataModule):
             )
             for split, count in split_counts.items():
                 counts[split] += count
-                
+
         elif is_training_dataset:
             # Regular training cell type
             subset = ds.to_subset_dataset("train", pert_indices, ctrl_indices)
             self.train_datasets.append(subset)
-            counts['train'] = len(subset)
-            
+            counts["train"] = len(subset)
+
         return counts
 
     def _setup_global_celltype_map(self):
@@ -491,9 +528,8 @@ class PerturbationDataModule(LightningDataModule):
         Set up training and test datasets.
         """
         if len(self.train_datasets) == 0:
-            logger.error("Setting up training and test datasets...")
             self._setup_datasets()
-            logger.error(
+            print(
                 "Done! Train / Val / Test splits: %d / %d / %d",
                 len(self.train_datasets),
                 len(self.val_datasets),
@@ -520,16 +556,23 @@ class PerturbationDataModule(LightningDataModule):
             return None
         return self._create_dataloader(self.test_datasets, test=True)
 
-    def _create_dataloader(self, datasets: List[Dataset], test: bool = False, batch_size: Optional[int] = None):
+    def _create_dataloader(
+        self,
+        datasets: List[Dataset],
+        test: bool = False,
+        batch_size: Optional[int] = None,
+    ):
         """Create a DataLoader with appropriate configuration."""
         use_int_counts = "int_counts" in self.__dict__ and self.int_counts
-        collate_fn = lambda batch: PerturbationDataset.collate_fn(batch, int_counts=use_int_counts)
-        
+        collate_fn = lambda batch: PerturbationDataset.collate_fn(
+            batch, int_counts=use_int_counts
+        )
+
         ds = MetadataConcatDataset(datasets)
         use_batch = self.basal_mapping_strategy == "batch"
-        
+
         batch_size = batch_size or (1 if test else self.batch_size)
-        
+
         sampler = PerturbationBatchSampler(
             dataset=ds,
             batch_size=batch_size,
@@ -538,7 +581,7 @@ class PerturbationDataModule(LightningDataModule):
             test=test,
             use_batch=use_batch,
         )
-        
+
         return DataLoader(
             ds,
             batch_sampler=sampler,
