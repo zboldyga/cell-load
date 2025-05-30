@@ -127,15 +127,15 @@ class PerturbationDataset(Dataset):
         Fetch a sample (perturbed + mapped control) by filtered index.
 
         This returns a dictionary with:
-        - X: the expression of the perturbed cell (either in gene space or embedding space)
-        - basal: the control cell’s expression as chosen by the mapping strategy (matching X's space)
-        - pert: the one-hot encoding (or other featurization) for the perturbation
+        - pert_cell_emb: the embedding of the perturbed cell (either in gene space or embedding space)
+        - ctrl_cell_emb: the control cell’s embedding. control cells are chosen by the mapping strategy
+        - pert_emb: the one-hot encoding (or other featurization) for the perturbation
         - pert_name: the perturbation name
         - cell_type: the cell type
-        - gem_group: the batch (as an int or string)
-        - gem_group_name: the batch name (as a string)
-        - X_hvg: the raw gene expression of the perturbed cell (if store_raw_expression is True)
-        - basal_hvg: the raw gene expression of the control cell (if store_raw_basal is True)
+        - batch: the batch (as an int or string)
+        - batch_name: the batch name (as a string)
+        - pert_cell_counts: the raw gene expression of the perturbed cell (if store_raw_expression is True)
+        - ctrl_cell_counts: the raw gene expression of the control cell (if store_raw_basal is True)
         """
 
         # Get the perturbed cell expression, control cell expression, and index of mapped control cell
@@ -165,28 +165,32 @@ class PerturbationDataset(Dataset):
         )
 
         sample = {
-            "X": pert_expr,
-            "basal": ctrl_expr,
-            "pert": pert_onehot,
+            "pert_cell_emb": pert_expr,
+            "ctrl_cell_emb": ctrl_expr,
+            "pert_emb": pert_onehot,
             "pert_name": pert_name,
             "cell_type": cell_type,
-            "gem_group": batch_onehot,
-            "gem_group_name": batch_name,
+            "batch": batch_onehot,
+            "batch_name": batch_name,
         }
 
         # Optionally include raw expressions for the perturbed cell, for training a decoder
         if self.store_raw_expression:
             if self.output_space == "gene":
-                sample["X_hvg"] = self.fetch_obsm_expression(file_idx, "X_hvg")
+                sample["pert_cell_counts"] = self.fetch_obsm_expression(
+                    file_idx, "X_hvg"
+                )
             elif self.output_space == "all":
-                sample["X_hvg"] = self.fetch_gene_expression(file_idx)
+                sample["pert_cell_counts"] = self.fetch_gene_expression(file_idx)
 
         # Optionally include raw expressions for the control cell
         if self.store_raw_basal:
             if self.output_space == "gene":
-                sample["basal_hvg"] = self.fetch_obsm_expression(ctrl_idx, "X_hvg")
+                sample["ctrl_cell_counts"] = self.fetch_obsm_expression(
+                    ctrl_idx, "X_hvg"
+                )
             elif self.output_space == "all":
-                sample["basal_hvg"] = self.fetch_gene_expression(ctrl_idx)
+                sample["ctrl_cell_counts"] = self.fetch_gene_expression(ctrl_idx)
 
         return sample
 
@@ -343,60 +347,60 @@ class PerturbationDataset(Dataset):
         batch_size = len(batch)
 
         # Preallocate lists with exact size
-        X_list = [None] * batch_size
-        basal_list = [None] * batch_size
-        pert_list = [None] * batch_size
+        pert_cell_emb_list = [None] * batch_size
+        ctrl_cell_emb_list = [None] * batch_size
+        pert_emb_list = [None] * batch_size
         pert_name_list = [None] * batch_size
         cell_type_list = [None] * batch_size
-        gem_group_list = [None] * batch_size
-        gem_group_name_list = [None] * batch_size
+        batch_list = [None] * batch_size
+        batch_name_list = [None] * batch_size
 
         # Check if optional fields exist
-        has_X_hvg = "X_hvg" in batch[0]
-        has_basal_hvg = "basal_hvg" in batch[0]
+        has_pert_cell_counts = "pert_cell_counts" in batch[0]
+        has_ctrl_cell_counts = "ctrl_cell_counts" in batch[0]
 
         # Preallocate optional lists if needed
-        if has_X_hvg:
-            X_hvg_list = [None] * batch_size
+        if has_pert_cell_counts:
+            pert_cell_counts_list = [None] * batch_size
 
-        if has_basal_hvg:
-            basal_hvg_list = [None] * batch_size
+        if has_ctrl_cell_counts:
+            ctrl_cell_counts_list = [None] * batch_size
 
         # Process all items in a single pass
         for i, item in enumerate(batch):
-            X_list[i] = item["X"]
-            basal_list[i] = item["basal"]
-            pert_list[i] = item["pert"]
+            pert_cell_emb_list[i] = item["pert_cell_emb"]
+            ctrl_cell_emb_list[i] = item["ctrl_cell_emb"]
+            pert_emb_list[i] = item["pert_emb"]
             pert_name_list[i] = item["pert_name"]
             cell_type_list[i] = item["cell_type"]
-            gem_group_list[i] = item["gem_group"]
-            gem_group_name_list[i] = item["gem_group_name"]
+            batch_list[i] = item["batch"]
+            batch_name_list[i] = item["batch_name"]
 
-            if has_X_hvg:
-                X_hvg_list[i] = item["X_hvg"]
+            if has_pert_cell_counts:
+                pert_cell_counts_list[i] = item["pert_cell_counts"]
 
-            if has_basal_hvg:
-                basal_hvg_list[i] = item["basal_hvg"]
+            if has_ctrl_cell_counts:
+                ctrl_cell_counts_list[i] = item["ctrl_cell_counts"]
 
         # Create batch dictionary
         batch_dict = {
-            "X": torch.stack(X_list),
-            "basal": torch.stack(basal_list),
-            "pert": torch.stack(pert_list),
+            "pert_cell_emb": torch.stack(pert_cell_emb_list),
+            "ctrl_cell_emb": torch.stack(ctrl_cell_emb_list),
+            "pert_emb": torch.stack(pert_emb_list),
             "pert_name": pert_name_list,
             "cell_type": cell_type_list,
-            "gem_group": torch.stack(gem_group_list),
-            "gem_group_name": gem_group_name_list,
+            "batch": torch.stack(batch_list),
+            "batch_name": batch_name_list,
         }
 
-        if has_X_hvg:
-            X_hvg = torch.stack(X_hvg_list)
+        if has_pert_cell_counts:
+            pert_cell_counts = torch.stack(pert_cell_counts_list)
 
             # AUTO‐DETECT: are these already log1p‐transformed?
             # compute fractional part
-            fracs = (X_hvg - X_hvg.floor()).abs()
+            fracs = (pert_cell_counts - pert_cell_counts.floor()).abs()
 
-            # if >1e-6 in more than, say, 1% of entries, we assume log‐counts
+            # if >1e-6 in more than 5% of entries, we assume log‐counts
             frac_ratio = (fracs > 1e-6).float().mean()
             already_logged = frac_ratio > 0.05
 
@@ -404,23 +408,23 @@ class PerturbationDataset(Dataset):
                 if (
                     int_counts
                 ):  # if the user wants to model with raw counts, don't log transform
-                    batch_dict["X_hvg"] = torch.expm1(X_hvg)
+                    batch_dict["pert_cell_counts"] = torch.expm1(pert_cell_counts)
                 else:
-                    batch_dict["X_hvg"] = X_hvg
+                    batch_dict["pert_cell_counts"] = pert_cell_counts
             else:
                 if int_counts:
-                    batch_dict["X_hvg"] = X_hvg
+                    batch_dict["pert_cell_counts"] = pert_cell_counts
                 else:
-                    batch_dict["X_hvg"] = torch.log1p(X_hvg)
+                    batch_dict["pert_cell_counts"] = torch.log1p(pert_cell_counts)
 
-        if has_basal_hvg:
-            basal_hvg = torch.stack(basal_hvg_list)
+        if has_ctrl_cell_counts:
+            ctrl_cell_counts = torch.stack(ctrl_cell_counts_list)
 
             # AUTO‐DETECT: are these already log1p‐transformed?
             # compute fractional part
-            fracs = (basal_hvg - basal_hvg.floor()).abs()
+            fracs = (ctrl_cell_counts - ctrl_cell_counts.floor()).abs()
 
-            # if >1e-6 in more than, say, 1% of entries, we assume log‐counts
+            # if >1e-6 in more than 5% of entries, we assume log‐counts
             frac_ratio = (fracs > 1e-6).float().mean()
             already_logged = frac_ratio > 0.05
 
@@ -428,14 +432,14 @@ class PerturbationDataset(Dataset):
                 if (
                     int_counts
                 ):  # if the user wants to model with raw counts, don't log transform
-                    batch_dict["basal_hvg"] = torch.expm1(basal_hvg)
+                    batch_dict["ctrl_cell_counts"] = torch.expm1(ctrl_cell_counts)
                 else:
-                    batch_dict["basal_hvg"] = basal_hvg
+                    batch_dict["ctrl_cell_counts"] = ctrl_cell_counts
             else:
                 if int_counts:
-                    batch_dict["basal_hvg"] = basal_hvg
+                    batch_dict["ctrl_cell_counts"] = ctrl_cell_counts
                 else:
-                    batch_dict["basal_hvg"] = torch.log1p(basal_hvg)
+                    batch_dict["ctrl_cell_counts"] = torch.log1p(ctrl_cell_counts)
 
         return batch_dict
 

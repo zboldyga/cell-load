@@ -197,18 +197,18 @@ def test_collate_fn_shapes_and_keys(synthetic_data):
     batch = next(iter(dm.train_dataloader()))
 
     for key in (
-        "X",
-        "basal",
-        "pert",
+        "pert_cell_emb",
+        "ctrl_cell_emb",
+        "pert_emb",
         "pert_name",
         "cell_type",
-        "gem_group",
-        "gem_group_name",
+        "batch",
+        "batch_name",
     ):
         assert key in batch
-    assert isinstance(batch["X"], torch.Tensor)
-    assert batch["X"].shape[0] == 4
-    assert batch["X"].ndim == 2
+    assert isinstance(batch["pert_cell_emb"], torch.Tensor)
+    assert batch["pert_cell_emb"].shape[0] == 4
+    assert batch["pert_cell_emb"].ndim == 2
 
 
 def test_getitem_basal_matches_control(synthetic_data):
@@ -234,8 +234,8 @@ def test_getitem_basal_matches_control(synthetic_data):
     )
     sample = ds[subset.indices[0]]
     # basal must be same shape as X and non-negative
-    assert sample["basal"].shape == sample["X"].shape
-    assert torch.all(sample["basal"] >= 0)
+    assert sample["ctrl_cell_emb"].shape == sample["pert_cell_emb"].shape
+    assert torch.all(sample["ctrl_cell_emb"] >= 0)
 
 
 def test_to_subset_dataset_control_flag(synthetic_data):

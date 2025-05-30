@@ -99,9 +99,7 @@ class BaseMappingStrategy(ABC):
         # Get expression(s) based on embed_key
         if dataset.embed_key:
             control_index = self.get_control_index(dataset, split, perturbed_idx)
-            pert_expr = torch.tensor(
-                dataset.fetch_obsm_expression(perturbed_idx, dataset.embed_key)
-            )
+            pert_expr = dataset.fetch_obsm_expression(perturbed_idx, dataset.embed_key)
             if control_index is None:
                 ctrl_expr = torch.zeros_like(pert_expr)  # default to zero vector
             else:
