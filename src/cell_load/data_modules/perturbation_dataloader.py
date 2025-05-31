@@ -61,7 +61,6 @@ class PerturbationDataModule(LightningDataModule):
         toml_config_path: str,
         batch_size: int = 128,
         num_workers: int = 8,
-        few_shot_percent: float = 0.3,
         random_seed: int = 42,  # this should be removed by seed everything
         pert_col: str = "gene",
         batch_col: str = "gem_group",
@@ -94,6 +93,7 @@ class PerturbationDataModule(LightningDataModule):
         super().__init__()
 
         # Load and validate configuration
+        self.toml_config_path = toml_config_path
         self.config = ExperimentConfig.from_toml(toml_config_path)
         self.config.validate()
 
@@ -156,6 +156,236 @@ class PerturbationDataModule(LightningDataModule):
 
         # Initialize global maps
         self._setup_global_maps()
+    
+    def get_var_names(self):
+        """
+        Get the variable names (gene names) from the first dataset.
+        This assumes all datasets have the same gene names.
+        """
+        if len(self.test_datasets) == 0:
+            raise ValueError("No test datasets available to extract variable names.")
+        underlying_ds: PerturbationDataset = self.test_datasets[0].dataset
+        return underlying_ds.get_gene_names()
+
+    def setup(self, stage: Optional[str] = None):
+        """
+        Set up training and test datasets.
+        """
+        if len(self.train_datasets) == 0:
+            self._setup_datasets()
+            logger.error(
+                "Done! Train / Val / Test splits: %d / %d / %d",
+                len(self.train_datasets),
+                len(self.val_datasets),
+                len(self.test_datasets),
+            )
+
+    def save_state(self, filepath: str):
+        """
+        Save the data module configuration to a torch file.
+        This saves only the initialization parameters, not the computed splits for the datasets.
+        
+        Args:
+            filepath: Path where to save the configuration (should end with .torch)
+        """
+        save_dict = {
+            'toml_config_path': self.toml_config_path,
+            'batch_size': self.batch_size,
+            'num_workers': self.num_workers,
+            'random_seed': self.random_seed,
+            'pert_col': self.pert_col,
+            'batch_col': self.batch_col,
+            'cell_type_key': self.cell_type_key,
+            'control_pert': self.control_pert,
+            'embed_key': self.embed_key,
+            'output_space': self.output_space,
+            'basal_mapping_strategy': self.basal_mapping_strategy,
+            'n_basal_samples': self.n_basal_samples,
+            'should_yield_control_cells': self.should_yield_control_cells,
+            'cell_sentence_len': self.cell_sentence_len,
+            # Include the optional behaviors
+            'map_controls': self.map_controls,
+            'perturbation_features_file': self.perturbation_features_file,
+            'int_counts': self.int_counts,
+            'normalize_counts': self.normalize_counts,
+            'store_raw_basal': self.store_raw_basal,
+        }
+        
+        torch.save(save_dict, filepath)
+        logger.info(f"Saved data module configuration to {filepath}")
+
+    @classmethod
+    def load_state(cls, filepath: str):
+        """
+        Load a data module from a saved torch file.
+        This reconstructs the data module with the original initialization parameters.
+        You will need to call setup() after loading to recreate the datasets.
+        
+        Args:
+            filepath: Path to the saved configuration file
+            
+        Returns:
+            PerturbationDataModule: A new instance with the saved configuration
+        """
+        save_dict = torch.load(filepath, map_location='cpu')
+        logger.info(f"Loaded data module configuration from {filepath}")
+        
+        # Validate that the toml config file still exists
+        toml_path = Path(save_dict['toml_config_path'])
+        if not toml_path.exists():
+            logger.warning(f"TOML config file not found at {toml_path}. "
+                          "Make sure the file exists or the path is correct.")
+        
+        # Extract the kwargs that were passed to __init__
+        kwargs = {
+            'map_controls': save_dict.pop('map_controls', True),
+            'perturbation_features_file': save_dict.pop('perturbation_features_file', None),
+            'int_counts': save_dict.pop('int_counts', False),
+            'normalize_counts': save_dict.pop('normalize_counts', False),
+            'store_raw_basal': save_dict.pop('store_raw_basal', False),
+        }
+        
+        # Create new instance with all the saved parameters
+        return cls(**save_dict, **kwargs)
+
+    def get_var_dims(self):
+        underlying_ds: PerturbationDataset = self.test_datasets[0].dataset
+        if self.embed_key:
+            input_dim = underlying_ds.get_dim_for_obsm(self.embed_key)
+        else:
+            input_dim = underlying_ds.n_genes
+
+        gene_dim = underlying_ds.n_genes
+        # gene_dim = underlying_ds.get_num_hvgs()
+        try:
+            hvg_dim = underlying_ds.get_num_hvgs()
+        except:
+            assert self.embed_key is None, "No X_hvg detected, using raw .X"
+            hvg_dim = gene_dim
+
+        if self.embed_key is not None:
+            output_dim = underlying_ds.get_dim_for_obsm(self.embed_key)
+        else:
+            output_dim = input_dim  # training on raw gene expression
+
+        gene_names = underlying_ds.get_gene_names()
+
+        # get the shape of the first value in pert_onehot_map
+        pert_dim = next(iter(self.pert_onehot_map.values())).shape[0]
+        batch_dim = next(iter(self.batch_onehot_map.values())).shape[0]
+
+        return {
+            "input_dim": input_dim,
+            "gene_dim": gene_dim,
+            "hvg_dim": hvg_dim,
+            "output_dim": output_dim,
+            "pert_dim": pert_dim,
+            "gene_names": gene_names,
+            "batch_dim": batch_dim,
+        }
+
+    def get_shared_perturbations(self) -> Set[str]:
+        """
+        Compute shared perturbations between train and test sets by inspecting
+        only the actual subset indices in self.train_datasets and self.test_datasets.
+
+        This ensures we don't accidentally include all perturbations from the entire h5 file.
+        """
+
+        def _extract_perts_from_subset(subset) -> Set[str]:
+            """
+            Helper that returns the set of perturbation names for the
+            exact subset indices in 'subset'.
+            """
+            ds = subset.dataset  # The underlying PerturbationDataset
+            idxs = subset.indices  # The subset of row indices relevant to this Subset
+
+            # ds.pert_col typically is 'gene' or similar
+            pert_codes = ds.metadata_cache.pert_codes[idxs]
+            # Convert each code to its corresponding string label
+            pert_names = ds.pert_categories[pert_codes]
+
+            return set(pert_names)
+
+        # 1) Gather all perturbations found across the *actual training subsets*
+        train_perts = set()
+        for subset in self.train_datasets:
+            train_perts.update(_extract_perts_from_subset(subset))
+
+        # 2) Gather all perturbations found across the *actual testing subsets*
+        test_perts = set()
+        for subset in self.test_datasets:
+            test_perts.update(_extract_perts_from_subset(subset))
+
+        # 3) Intersection = shared across both train and test
+        shared_perts = train_perts & test_perts
+
+        logger.error(f"Found {len(train_perts)} distinct perts in the train subsets.")
+        logger.error(f"Found {len(test_perts)} distinct perts in the test subsets.")
+        logger.error(f"Found {len(shared_perts)} shared perturbations (train ∩ test).")
+
+        return shared_perts
+
+    def get_control_pert(self):
+        # Return the control perturbation name
+        return self.train_datasets[0].dataset.control_pert
+
+    def train_dataloader(self):
+        if len(self.train_datasets) == 0:
+            raise ValueError("No training datasets available. Please call setup() first.")
+        return self._create_dataloader(self.train_datasets, test=False)
+
+    def val_dataloader(self):
+        if len(self.val_datasets) == 0:
+            return None
+        return self._create_dataloader(self.val_datasets, test=False)
+
+    def test_dataloader(self):
+        if len(self.test_datasets) == 0:
+            return None
+        return self._create_dataloader(self.test_datasets, test=True, batch_size=1)
+
+    def predict_dataloader(self):
+        if len(self.test_datasets) == 0:
+            return None
+        return self._create_dataloader(self.test_datasets, test=True)
+
+    # Helper functions to set up global maps and datasets
+
+    def _create_dataloader(
+        self,
+        datasets: List[Dataset],
+        test: bool = False,
+        batch_size: Optional[int] = None,
+    ):
+        """Create a DataLoader with appropriate configuration."""
+        use_int_counts = "int_counts" in self.__dict__ and self.int_counts
+        collate_fn = lambda batch: PerturbationDataset.collate_fn(
+            batch, int_counts=use_int_counts
+        )
+
+        ds = MetadataConcatDataset(datasets)
+        use_batch = self.basal_mapping_strategy == "batch"
+
+        batch_size = batch_size or (1 if test else self.batch_size)
+
+        sampler = PerturbationBatchSampler(
+            dataset=ds,
+            batch_size=batch_size,
+            drop_last=False,
+            cell_sentence_len=self.cell_sentence_len,
+            test=test,
+            use_batch=use_batch,
+        )
+
+        return DataLoader(
+            ds,
+            batch_sampler=sampler,
+            num_workers=self.num_workers,
+            collate_fn=collate_fn,
+            pin_memory=True,
+            prefetch_factor=4 if not test else None,
+        )
 
     def _setup_global_maps(self):
         """
@@ -203,15 +433,6 @@ class PerturbationDataModule(LightningDataModule):
             self.pert_onehot_map = generate_onehot_map(all_perts)
         self.batch_onehot_map = generate_onehot_map(all_batches)
 
-    def get_var_names(self):
-        """
-        Get the variable names (gene names) from the first dataset.
-        This assumes all datasets have the same gene names.
-        """
-        if len(self.test_datasets) == 0:
-            raise ValueError("No test datasets available to extract variable names.")
-        underlying_ds: PerturbationDataset = self.test_datasets[0].dataset
-        return underlying_ds.get_gene_names()
 
     def _create_base_dataset(
         self, dataset_name: str, fpath: Path
@@ -525,172 +746,3 @@ class PerturbationDataModule(LightningDataModule):
         self.batch_onehot_map = generate_onehot_map(all_batches)
         self.num_batches = len(self.batch_onehot_map)
 
-    def setup(self, stage: Optional[str] = None):
-        """
-        Set up training and test datasets.
-        """
-        if len(self.train_datasets) == 0:
-            self._setup_datasets()
-            logger.error(
-                "Done! Train / Val / Test splits: %d / %d / %d",
-                len(self.train_datasets),
-                len(self.val_datasets),
-                len(self.test_datasets),
-            )
-
-    def train_dataloader(self):
-        if len(self.train_datasets) == 0:
-            return None
-        return self._create_dataloader(self.train_datasets, test=False)
-
-    def val_dataloader(self):
-        if len(self.val_datasets) == 0:
-            return None
-        return self._create_dataloader(self.val_datasets, test=False)
-
-    def test_dataloader(self):
-        if len(self.test_datasets) == 0:
-            return None
-        return self._create_dataloader(self.test_datasets, test=True, batch_size=1)
-
-    def predict_dataloader(self):
-        if len(self.test_datasets) == 0:
-            return None
-        return self._create_dataloader(self.test_datasets, test=True)
-
-    def _create_dataloader(
-        self,
-        datasets: List[Dataset],
-        test: bool = False,
-        batch_size: Optional[int] = None,
-    ):
-        """Create a DataLoader with appropriate configuration."""
-        use_int_counts = "int_counts" in self.__dict__ and self.int_counts
-        collate_fn = lambda batch: PerturbationDataset.collate_fn(
-            batch, int_counts=use_int_counts
-        )
-
-        ds = MetadataConcatDataset(datasets)
-        use_batch = self.basal_mapping_strategy == "batch"
-
-        batch_size = batch_size or (1 if test else self.batch_size)
-
-        sampler = PerturbationBatchSampler(
-            dataset=ds,
-            batch_size=batch_size,
-            drop_last=False,
-            cell_sentence_len=self.cell_sentence_len,
-            test=test,
-            use_batch=use_batch,
-        )
-
-        return DataLoader(
-            ds,
-            batch_sampler=sampler,
-            num_workers=self.num_workers,
-            collate_fn=collate_fn,
-            pin_memory=True,
-            prefetch_factor=4 if not test else None,
-        )
-
-    def set_inference_mapping_strategy(self, strategy_cls, **strategy_kwargs):
-        """
-        Then we create an instance of that strategy and call each test dataset's
-        reset_mapping_strategy.
-        """
-        # normal usage for e.g. NearestNeighborMappingStrategy, etc.
-        self.basal_mapping_strategy = strategy_cls.name()
-        self.mapping_strategy_cls = strategy_cls
-        self.mapping_strategy_kwargs = strategy_kwargs
-
-        for ds_subset in self.test_datasets:
-            ds: PerturbationDataset = ds_subset.dataset
-            ds.reset_mapping_strategy(
-                strategy_cls, stage="inference", **strategy_kwargs
-            )
-
-        logger.error(
-            "Mapping strategy set to %s for test datasets.", strategy_cls.__name__
-        )
-
-    def get_var_dims(self):
-        underlying_ds: PerturbationDataset = self.test_datasets[0].dataset
-        if self.embed_key:
-            input_dim = underlying_ds.get_dim_for_obsm(self.embed_key)
-        else:
-            input_dim = underlying_ds.n_genes
-
-        gene_dim = underlying_ds.n_genes
-        # gene_dim = underlying_ds.get_num_hvgs()
-        try:
-            hvg_dim = underlying_ds.get_num_hvgs()
-        except:
-            assert self.embed_key is None, "No X_hvg detected, using raw .X"
-            hvg_dim = gene_dim
-
-        if self.embed_key is not None:
-            output_dim = underlying_ds.get_dim_for_obsm(self.embed_key)
-        else:
-            output_dim = input_dim  # training on raw gene expression
-
-        gene_names = underlying_ds.get_gene_names()
-
-        # get the shape of the first value in pert_onehot_map
-        pert_dim = next(iter(self.pert_onehot_map.values())).shape[0]
-        batch_dim = next(iter(self.batch_onehot_map.values())).shape[0]
-
-        return {
-            "input_dim": input_dim,
-            "gene_dim": gene_dim,
-            "hvg_dim": hvg_dim,
-            "output_dim": output_dim,
-            "pert_dim": pert_dim,
-            "gene_names": gene_names,
-            "batch_dim": batch_dim,
-        }
-
-    def get_shared_perturbations(self) -> Set[str]:
-        """
-        Compute shared perturbations between train and test sets by inspecting
-        only the actual subset indices in self.train_datasets and self.test_datasets.
-
-        This ensures we don't accidentally include all perturbations from the entire h5 file.
-        """
-
-        def _extract_perts_from_subset(subset) -> Set[str]:
-            """
-            Helper that returns the set of perturbation names for the
-            exact subset indices in 'subset'.
-            """
-            ds = subset.dataset  # The underlying PerturbationDataset
-            idxs = subset.indices  # The subset of row indices relevant to this Subset
-
-            # ds.pert_col typically is 'gene' or similar
-            pert_codes = ds.metadata_cache.pert_codes[idxs]
-            # Convert each code to its corresponding string label
-            pert_names = ds.pert_categories[pert_codes]
-
-            return set(pert_names)
-
-        # 1) Gather all perturbations found across the *actual training subsets*
-        train_perts = set()
-        for subset in self.train_datasets:
-            train_perts.update(_extract_perts_from_subset(subset))
-
-        # 2) Gather all perturbations found across the *actual testing subsets*
-        test_perts = set()
-        for subset in self.test_datasets:
-            test_perts.update(_extract_perts_from_subset(subset))
-
-        # 3) Intersection = shared across both train and test
-        shared_perts = train_perts & test_perts
-
-        logger.error(f"Found {len(train_perts)} distinct perts in the train subsets.")
-        logger.error(f"Found {len(test_perts)} distinct perts in the test subsets.")
-        logger.error(f"Found {len(shared_perts)} shared perturbations (train ∩ test).")
-
-        return shared_perts
-
-    def get_control_pert(self):
-        # Return the control perturbation name
-        return self.train_datasets[0].dataset.control_pert
