@@ -156,7 +156,7 @@ class PerturbationDataModule(LightningDataModule):
 
         # Initialize global maps
         self._setup_global_maps()
-    
+
     def get_var_names(self):
         """
         Get the variable names (gene names) from the first dataset.
@@ -184,33 +184,33 @@ class PerturbationDataModule(LightningDataModule):
         """
         Save the data module configuration to a torch file.
         This saves only the initialization parameters, not the computed splits for the datasets.
-        
+
         Args:
             filepath: Path where to save the configuration (should end with .torch)
         """
         save_dict = {
-            'toml_config_path': self.toml_config_path,
-            'batch_size': self.batch_size,
-            'num_workers': self.num_workers,
-            'random_seed': self.random_seed,
-            'pert_col': self.pert_col,
-            'batch_col': self.batch_col,
-            'cell_type_key': self.cell_type_key,
-            'control_pert': self.control_pert,
-            'embed_key': self.embed_key,
-            'output_space': self.output_space,
-            'basal_mapping_strategy': self.basal_mapping_strategy,
-            'n_basal_samples': self.n_basal_samples,
-            'should_yield_control_cells': self.should_yield_control_cells,
-            'cell_sentence_len': self.cell_sentence_len,
+            "toml_config_path": self.toml_config_path,
+            "batch_size": self.batch_size,
+            "num_workers": self.num_workers,
+            "random_seed": self.random_seed,
+            "pert_col": self.pert_col,
+            "batch_col": self.batch_col,
+            "cell_type_key": self.cell_type_key,
+            "control_pert": self.control_pert,
+            "embed_key": self.embed_key,
+            "output_space": self.output_space,
+            "basal_mapping_strategy": self.basal_mapping_strategy,
+            "n_basal_samples": self.n_basal_samples,
+            "should_yield_control_cells": self.should_yield_control_cells,
+            "cell_sentence_len": self.cell_sentence_len,
             # Include the optional behaviors
-            'map_controls': self.map_controls,
-            'perturbation_features_file': self.perturbation_features_file,
-            'int_counts': self.int_counts,
-            'normalize_counts': self.normalize_counts,
-            'store_raw_basal': self.store_raw_basal,
+            "map_controls": self.map_controls,
+            "perturbation_features_file": self.perturbation_features_file,
+            "int_counts": self.int_counts,
+            "normalize_counts": self.normalize_counts,
+            "store_raw_basal": self.store_raw_basal,
         }
-        
+
         torch.save(save_dict, filepath)
         logger.info(f"Saved data module configuration to {filepath}")
 
@@ -220,31 +220,35 @@ class PerturbationDataModule(LightningDataModule):
         Load a data module from a saved torch file.
         This reconstructs the data module with the original initialization parameters.
         You will need to call setup() after loading to recreate the datasets.
-        
+
         Args:
             filepath: Path to the saved configuration file
-            
+
         Returns:
             PerturbationDataModule: A new instance with the saved configuration
         """
-        save_dict = torch.load(filepath, map_location='cpu')
+        save_dict = torch.load(filepath, map_location="cpu")
         logger.info(f"Loaded data module configuration from {filepath}")
-        
+
         # Validate that the toml config file still exists
-        toml_path = Path(save_dict['toml_config_path'])
+        toml_path = Path(save_dict["toml_config_path"])
         if not toml_path.exists():
-            logger.warning(f"TOML config file not found at {toml_path}. "
-                          "Make sure the file exists or the path is correct.")
-        
+            logger.warning(
+                f"TOML config file not found at {toml_path}. "
+                "Make sure the file exists or the path is correct."
+            )
+
         # Extract the kwargs that were passed to __init__
         kwargs = {
-            'map_controls': save_dict.pop('map_controls', True),
-            'perturbation_features_file': save_dict.pop('perturbation_features_file', None),
-            'int_counts': save_dict.pop('int_counts', False),
-            'normalize_counts': save_dict.pop('normalize_counts', False),
-            'store_raw_basal': save_dict.pop('store_raw_basal', False),
+            "map_controls": save_dict.pop("map_controls", True),
+            "perturbation_features_file": save_dict.pop(
+                "perturbation_features_file", None
+            ),
+            "int_counts": save_dict.pop("int_counts", False),
+            "normalize_counts": save_dict.pop("normalize_counts", False),
+            "store_raw_basal": save_dict.pop("store_raw_basal", False),
         }
-        
+
         # Create new instance with all the saved parameters
         return cls(**save_dict, **kwargs)
 
@@ -332,7 +336,9 @@ class PerturbationDataModule(LightningDataModule):
 
     def train_dataloader(self):
         if len(self.train_datasets) == 0:
-            raise ValueError("No training datasets available. Please call setup() first.")
+            raise ValueError(
+                "No training datasets available. Please call setup() first."
+            )
         return self._create_dataloader(self.train_datasets, test=False)
 
     def val_dataloader(self):
@@ -432,7 +438,6 @@ class PerturbationDataModule(LightningDataModule):
             # Fall back to default: generate one-hot mapping
             self.pert_onehot_map = generate_onehot_map(all_perts)
         self.batch_onehot_map = generate_onehot_map(all_batches)
-
 
     def _create_base_dataset(
         self, dataset_name: str, fpath: Path
@@ -535,9 +540,8 @@ class PerturbationDataModule(LightningDataModule):
                 tqdm.write(
                     f"Processed {fname}: {train_sum} train, {val_sum} val, {test_sum} test"
                 )
-            
-            logger.error("\n")
 
+            logger.error("\n")
 
     def _split_fewshot_celltype(
         self,
@@ -745,4 +749,3 @@ class PerturbationDataModule(LightningDataModule):
 
         self.batch_onehot_map = generate_onehot_map(all_batches)
         self.num_batches = len(self.batch_onehot_map)
-
