@@ -123,7 +123,7 @@ class PerturbationDataModule(LightningDataModule):
         self.normalize_counts = kwargs.get("normalize_counts", False)
         self.store_raw_basal = kwargs.get("store_raw_basal", False)
 
-        logger.error(
+        logger.info(
             f"Initializing DataModule: batch_size={batch_size}, workers={num_workers}, "
             f"random_seed={random_seed}"
         )
@@ -173,7 +173,7 @@ class PerturbationDataModule(LightningDataModule):
         """
         if len(self.train_datasets) == 0:
             self._setup_datasets()
-            logger.error(
+            logger.info(
                 "Done! Train / Val / Test splits: %d / %d / %d",
                 len(self.train_datasets),
                 len(self.val_datasets),
@@ -324,9 +324,9 @@ class PerturbationDataModule(LightningDataModule):
         # 3) Intersection = shared across both train and test
         shared_perts = train_perts & test_perts
 
-        logger.error(f"Found {len(train_perts)} distinct perts in the train subsets.")
-        logger.error(f"Found {len(test_perts)} distinct perts in the test subsets.")
-        logger.error(f"Found {len(shared_perts)} shared perturbations (train ∩ test).")
+        logger.info(f"Found {len(train_perts)} distinct perts in the train subsets.")
+        logger.info(f"Found {len(test_perts)} distinct perts in the test subsets.")
+        logger.info(f"Found {len(shared_perts)} shared perturbations (train ∩ test).")
 
         return shared_perts
 
@@ -429,7 +429,7 @@ class PerturbationDataModule(LightningDataModule):
                     f"The following perturbations are missing from the featurization file: {missing}"
                 )
 
-            logger.error(
+            logger.info(
                 "Loaded custom perturbation featurizations for %d perturbations.",
                 len(featurization_dict),
             )
@@ -482,10 +482,10 @@ class PerturbationDataModule(LightningDataModule):
             fewshot_celltypes = self.config.get_fewshot_celltypes(dataset_name)
             is_training_dataset = self.config.training.get(dataset_name) == "train"
 
-            logger.error(f"Processing dataset {dataset_name}:")
-            logger.error(f"  - Training dataset: {is_training_dataset}")
-            logger.error(f"  - Zeroshot cell types: {list(zeroshot_celltypes.keys())}")
-            logger.error(f"  - Fewshot cell types: {list(fewshot_celltypes.keys())}")
+            logger.info(f"Processing dataset {dataset_name}:")
+            logger.info(f"  - Training dataset: {is_training_dataset}")
+            logger.info(f"  - Zeroshot cell types: {list(zeroshot_celltypes.keys())}")
+            logger.info(f"  - Fewshot cell types: {list(fewshot_celltypes.keys())}")
 
             # Process each file in the dataset
             for fname, fpath in tqdm(
@@ -541,7 +541,7 @@ class PerturbationDataModule(LightningDataModule):
                     f"Processed {fname}: {train_sum} train, {val_sum} val, {test_sum} test"
                 )
 
-            logger.error("\n")
+            logger.info("\n")
 
     def _split_fewshot_celltype(
         self,
