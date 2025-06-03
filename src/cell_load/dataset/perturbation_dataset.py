@@ -8,7 +8,7 @@ import torch
 from torch.utils.data import Dataset, Subset
 
 from ..mapping_strategies import BaseMappingStrategy
-from ..utils.data_utils import GlobalH5MetadataCache
+from ..utils.data_utils import GlobalH5MetadataCache, suspected_discrete_torch
 
 logger = logging.getLogger(__name__)
 
@@ -396,13 +396,7 @@ class PerturbationDataset(Dataset):
         if has_pert_cell_counts:
             pert_cell_counts = torch.stack(pert_cell_counts_list)
 
-            # AUTO‐DETECT: are these already log1p‐transformed?
-            # compute fractional part
-            fracs = (pert_cell_counts - pert_cell_counts.floor()).abs()
-
-            # if >1e-6 in more than 5% of entries, we assume log‐counts
-            frac_ratio = (fracs > 1e-6).float().mean()
-            already_logged = frac_ratio > 0.05
+            already_logged = suspected_discrete_torch(pert_cell_counts)
 
             if already_logged:  # counts are already log transformed
                 if (
@@ -420,13 +414,7 @@ class PerturbationDataset(Dataset):
         if has_ctrl_cell_counts:
             ctrl_cell_counts = torch.stack(ctrl_cell_counts_list)
 
-            # AUTO‐DETECT: are these already log1p‐transformed?
-            # compute fractional part
-            fracs = (ctrl_cell_counts - ctrl_cell_counts.floor()).abs()
-
-            # if >1e-6 in more than 5% of entries, we assume log‐counts
-            frac_ratio = (fracs > 1e-6).float().mean()
-            already_logged = frac_ratio > 0.05
+            already_logged = suspected_discrete_torch(ctrl_cell_counts)
 
             if already_logged:  # counts are already log transformed
                 if (

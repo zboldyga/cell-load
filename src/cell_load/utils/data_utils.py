@@ -212,3 +212,15 @@ def split_perturbations_by_cell_fraction(
     train_perts = list(set(pert_groups.keys()) - set(val_perts))
 
     return train_perts, val_perts
+
+
+def suspected_discrete_torch(x: torch.Tensor, n_cells: int = 100) -> bool:
+    """Check if data appears to be discrete/raw counts by examining row sums.
+    Adapted from validate_normlog function for PyTorch tensors.
+    """
+    top_n = min(x.shape[0], n_cells)
+    rowsum = x[:top_n].sum(dim=1)
+
+    # Check if row sums are integers (fractional part == 0)
+    frac_part = rowsum - rowsum.floor()
+    return torch.all(torch.abs(frac_part) < 1e-7)
