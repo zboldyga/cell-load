@@ -343,7 +343,7 @@ class PerturbationDataModule(LightningDataModule):
 
     def val_dataloader(self):
         if len(self.val_datasets) == 0:
-            return None
+            return self._create_dataloader(self.test_datasets, test=False)
         return self._create_dataloader(self.val_datasets, test=False)
 
     def test_dataloader(self):
