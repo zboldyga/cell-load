@@ -236,7 +236,7 @@ def _mean(expr) -> float:
 
 
 def is_on_target_knockdown(
-    adata: anndata.AnnData,
+    adata: ad.AnnData,
     target_gene: str,
     perturbation_column: str = "gene",
     control_label: str = "non-targeting",
@@ -260,6 +260,13 @@ def is_on_target_knockdown(
         Residual fraction (0‒1). 0.30 → 70 % knock-down.
     layer : str | None, optional
         Use this matrix in ``adata.layers`` instead of ``adata.X``.
+
+    Raises
+    ------
+    KeyError
+        *target_gene* not present in ``adata.var_names``.
+    ValueError
+        No perturbed cells for *target_gene*, or control mean is zero.
 
     Returns
     -------
@@ -295,13 +302,13 @@ def is_on_target_knockdown(
 
 
 def filter_on_target_knockdown(
-    adata: anndata.AnnData,
+    adata: ad.AnnData,
     perturbation_column: str = "gene",
     control_label: str = "non-targeting",
     residual_expression: float = 0.30,
     layer: Optional[str] = None,
-    copy: bool = True,
-) -> anndata.AnnData:
+    var_gene_name = 'gene_name',
+) -> ad.AnnData:
     """
     Return a view/copy of *adata* retaining only perturbations that achieve the
     desired knock-down (plus the control cells).
@@ -320,13 +327,14 @@ def filter_on_target_knockdown(
         Subset containing successful perturbations and controls.
     """
     perts_to_keep: List[str] = []
+    adata_ = adata.copy()
+    adata_ = set_var_index_to_col(adata_, col=var_gene_name)
 
     for pert in adata.obs[perturbation_column].unique():
-        print(pert)
         if pert == control_label:
             continue  # always keep later
         keep = is_on_target_knockdown(
-            adata,
+            adata_,
             target_gene=pert,
             perturbation_column=perturbation_column,
             control_label=control_label,
@@ -337,7 +345,29 @@ def filter_on_target_knockdown(
             perts_to_keep.append(pert)
 
     perts_to_keep.append(control_label)  # ensure controls are retained
-    subset = adata[adata.obs[perturbation_column].isin(perts_to_keep)]
-    return subset.copy() if copy else subset
+    subset_idx = np.where(adata_.obs[perturbation_column].isin(perts_to_keep))[0]
+    return adata[subset_idx]
 
 
+def set_var_index_to_col(adata: ad.AnnData, col: str = "col", copy=True) -> None:
+    """
+    Set `adata.var` index to the values in the specified column, allowing non-unique indices.
+
+    Parameters
+    ----------
+    adata : AnnData
+        The AnnData object to modify.
+    col : str
+        Column in `adata.var` to use as the new index.
+
+    Raises
+    ------
+    KeyError
+        If the specified column does not exist in `adata.var`.
+    """    
+    if col not in adata.var.columns:
+        raise KeyError(f"Column {col!r} not found in adata.var.")
+
+    adata.var.index = adata.var[col].astype('str')
+    adata.var_names_make_unique()
+    return adata
