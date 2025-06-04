@@ -6,6 +6,8 @@ import h5py
 import numpy as np
 import torch
 
+import scipy.sparse as sp
+from typing import List, Optional
 from .singleton import Singleton
 
 log = logging.getLogger(__name__)
@@ -224,3 +226,148 @@ def suspected_discrete_torch(x: torch.Tensor, n_cells: int = 100) -> bool:
     # Check if row sums are integers (fractional part == 0)
     frac_part = rowsum - rowsum.floor()
     return torch.all(torch.abs(frac_part) < 1e-7)
+
+
+def _mean(expr) -> float:
+    """Return the mean of a dense or sparse 1-D/2-D slice."""
+    if sp.issparse(expr):
+        return float(expr.mean())
+    return float(np.asarray(expr).mean())
+
+
+def is_on_target_knockdown(
+    adata: ad.AnnData,
+    target_gene: str,
+    perturbation_column: str = "gene",
+    control_label: str = "non-targeting",
+    residual_expression: float = 0.30,
+    layer: Optional[str] = None,
+) -> bool:
+    """
+    True ⇢ average expression of *target_gene* in perturbed cells is below
+    `residual_expression` × (average expression in control cells).
+
+    Parameters
+    ----------
+    adata : AnnData
+    target_gene : str
+        Gene symbol to check.
+    perturbation_column : str, default "gene"
+        Column in ``adata.obs`` holding perturbation identities.
+    control_label : str, default "non-targeting"
+        Category in *perturbation_column* marking control cells.
+    residual_expression : float, default 0.30
+        Residual fraction (0‒1). 0.30 → 70 % knock-down.
+    layer : str | None, optional
+        Use this matrix in ``adata.layers`` instead of ``adata.X``.
+
+    Raises
+    ------
+    KeyError
+        *target_gene* not present in ``adata.var_names``.
+    ValueError
+        No perturbed cells for *target_gene*, or control mean is zero.
+
+    Returns
+    -------
+    bool
+    """
+    if target_gene == control_label:
+        # Never evaluate the control itself
+        return False
+
+    if target_gene not in adata.var_names:
+        print(f"Gene {target_gene!r} not found in `adata.var_names`.")
+        return 1
+
+    gene_idx = adata.var_names.get_loc(target_gene)
+    X = adata.layers[layer] if layer is not None else adata.X
+
+    control_cells = adata.obs[perturbation_column] == control_label
+    perturbed_cells = adata.obs[perturbation_column] == target_gene
+
+    if not perturbed_cells.any():
+        raise ValueError(f"No cells labelled with perturbation {target_gene!r}.")
+        
+    control_mean = _mean(X[control_cells, gene_idx])
+    if control_mean == 0:
+        raise ValueError(
+            f"Mean {target_gene!r} expression in control cells is zero; "
+            "cannot compute knock-down ratio."
+        )
+
+    perturbed_mean = _mean(X[perturbed_cells, gene_idx])
+    knockdown_ratio = perturbed_mean / control_mean
+    return knockdown_ratio < residual_expression
+
+
+def filter_on_target_knockdown(
+    adata: ad.AnnData,
+    perturbation_column: str = "gene",
+    control_label: str = "non-targeting",
+    residual_expression: float = 0.30,
+    layer: Optional[str] = None,
+    var_gene_name = 'gene_name',
+) -> ad.AnnData:
+    """
+    Return a view/copy of *adata* retaining only perturbations that achieve the
+    desired knock-down (plus the control cells).
+
+    Parameters
+    ----------
+    adata : AnnData
+    perturbation_column, control_label, residual_expression, layer
+        Passed through to :func:`is_on_target_knockdown`.
+    copy : bool, default True
+        If True, return a real copy; otherwise an AnnData view.
+
+    Returns
+    -------
+    AnnData
+        Subset containing successful perturbations and controls.
+    """
+    perts_to_keep: List[str] = []
+    adata_ = adata.copy()
+    adata_ = set_var_index_to_col(adata_, col=var_gene_name)
+
+    for pert in adata.obs[perturbation_column].unique():
+        if pert == control_label:
+            continue  # always keep later
+        keep = is_on_target_knockdown(
+            adata_,
+            target_gene=pert,
+            perturbation_column=perturbation_column,
+            control_label=control_label,
+            residual_expression=residual_expression,
+            layer=layer,
+        )
+        if keep:
+            perts_to_keep.append(pert)
+
+    perts_to_keep.append(control_label)  # ensure controls are retained
+    subset_idx = np.where(adata_.obs[perturbation_column].isin(perts_to_keep))[0]
+    return adata[subset_idx]
+
+
+def set_var_index_to_col(adata: ad.AnnData, col: str = "col", copy=True) -> None:
+    """
+    Set `adata.var` index to the values in the specified column, allowing non-unique indices.
+
+    Parameters
+    ----------
+    adata : AnnData
+        The AnnData object to modify.
+    col : str
+        Column in `adata.var` to use as the new index.
+
+    Raises
+    ------
+    KeyError
+        If the specified column does not exist in `adata.var`.
+    """    
+    if col not in adata.var.columns:
+        raise KeyError(f"Column {col!r} not found in adata.var.")
+
+    adata.var.index = adata.var[col].astype('str')
+    adata.var_names_make_unique()
+    return adata
