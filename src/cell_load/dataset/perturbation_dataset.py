@@ -308,7 +308,7 @@ class PerturbationDataset(Dataset):
         row_data = self.h5_file[f"/obsm/{key}"][idx]
         return torch.tensor(row_data, dtype=torch.float32)
 
-    def get_gene_names(self) -> List[str]:
+    def get_gene_names(self, output_space="all") -> List[str]:
         """
         Return the list of gene names from var/gene_name (or its categorical fallback).
 
@@ -323,15 +323,24 @@ class PerturbationDataset(Dataset):
 
         try:
             raw = self.h5_file["var/gene_name"][:]
+            if output_space == "gene":
+                hvg_mask = self.h5_file["/var/highly_variable"][:]
+                raw = raw[hvg_mask]
             return [_decode(x) for x in raw]
         except KeyError:
             try:
                 cats = self.h5_file["var/gene_name/categories"][:]
                 codes = self.h5_file["var/gene_name/codes"][:]
+                if output_space == "gene":
+                    hvg_mask = self.h5_file["/var/highly_variable"][:]
+                    codes = codes[hvg_mask]
                 decoded = [_decode(x) for x in cats]
                 return [decoded[i] for i in codes]
             except KeyError:
                 fallback = self.h5_file["var/_index"][:]
+                if output_space == "gene":
+                    hvg_mask = self.h5_file["/var/highly_variable"][:]
+                    fallback = fallback[hvg_mask]
                 return [_decode(x) for x in fallback]
 
     ##############################
