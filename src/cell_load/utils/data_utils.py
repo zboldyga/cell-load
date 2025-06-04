@@ -236,7 +236,7 @@ def _mean(expr) -> float:
 
 
 def is_on_target_knockdown(
-    adata: ad.AnnData,
+    adata: anndata.AnnData,
     target_gene: str,
     perturbation_column: str = "gene",
     control_label: str = "non-targeting",
@@ -288,7 +288,7 @@ def is_on_target_knockdown(
 
     if not perturbed_cells.any():
         raise ValueError(f"No cells labelled with perturbation {target_gene!r}.")
-        
+
     control_mean = _mean(X[control_cells, gene_idx])
     if control_mean == 0:
         raise ValueError(
@@ -302,13 +302,13 @@ def is_on_target_knockdown(
 
 
 def filter_on_target_knockdown(
-    adata: ad.AnnData,
+    adata: anndata.AnnData,
     perturbation_column: str = "gene",
     control_label: str = "non-targeting",
     residual_expression: float = 0.30,
     layer: Optional[str] = None,
-    var_gene_name = 'gene_name',
-) -> ad.AnnData:
+    var_gene_name="gene_name",
+) -> anndata.AnnData:
     """
     Return a view/copy of *adata* retaining only perturbations that achieve the
     desired knock-down (plus the control cells).
@@ -349,7 +349,7 @@ def filter_on_target_knockdown(
     return adata[subset_idx]
 
 
-def set_var_index_to_col(adata: ad.AnnData, col: str = "col", copy=True) -> None:
+def set_var_index_to_col(adata: anndata.AnnData, col: str = "col", copy=True) -> None:
     """
     Set `adata.var` index to the values in the specified column, allowing non-unique indices.
 
@@ -364,10 +364,10 @@ def set_var_index_to_col(adata: ad.AnnData, col: str = "col", copy=True) -> None
     ------
     KeyError
         If the specified column does not exist in `adata.var`.
-    """    
+    """
     if col not in adata.var.columns:
         raise KeyError(f"Column {col!r} not found in adata.var.")
 
-    adata.var.index = adata.var[col].astype('str')
+    adata.var.index = adata.var[col].astype("str")
     adata.var_names_make_unique()
     return adata
