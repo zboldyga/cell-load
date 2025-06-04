@@ -302,51 +302,93 @@ def is_on_target_knockdown(
 
 
 def filter_on_target_knockdown(
-    adata: ad.AnnData,
+    adata: anndata.AnnData,
     perturbation_column: str = "gene",
     control_label: str = "non-targeting",
-    residual_expression: float = 0.30,
+    residual_expression: float = 0.30,          # perturbation-level threshold
+    cell_residual_expression: float = 0.50,     # cell-level threshold
+    min_cells: int = 30,                        # **NEW**: minimum cells/perturbation
     layer: Optional[str] = None,
-    var_gene_name = 'gene_name',
-) -> ad.AnnData:
+    var_gene_name: str = "gene_name",
+) -> anndata.AnnData:
     """
-    Return a view/copy of *adata* retaining only perturbations that achieve the
-    desired knock-down (plus the control cells).
-
-    Parameters
-    ----------
-    adata : AnnData
-    perturbation_column, control_label, residual_expression, layer
-        Passed through to :func:`is_on_target_knockdown`.
-    copy : bool, default True
-        If True, return a real copy; otherwise an AnnData view.
+    1.  Keep perturbations whose *average* knock-down ≥ (1-residual_expression).
+    2.  Within those, keep only cells whose knock-down ≥ (1-cell_residual_expression).
+    3.  Discard perturbations that have < `min_cells` cells remaining
+        after steps 1–2.  Control cells are always preserved.
 
     Returns
     -------
     AnnData
-        Subset containing successful perturbations and controls.
+        View of `adata` satisfying all three criteria.
     """
-    perts_to_keep: List[str] = []
-    adata_ = adata.copy()
-    adata_ = set_var_index_to_col(adata_, col=var_gene_name)
+    # --- prep ---
+    adata_ = set_var_index_to_col(adata.copy(), col=var_gene_name)
+    X = adata_.layers[layer] if layer is not None else adata_.X
+    perts = adata_.obs[perturbation_column]
+    control_cells = perts == control_label
 
-    for pert in adata.obs[perturbation_column].unique():
+    # ---------- stage 1: perturbation filter ----------
+    perts_to_keep = [control_label]  # always keep controls
+    for pert in perts.unique():
         if pert == control_label:
-            continue  # always keep later
-        keep = is_on_target_knockdown(
+            continue
+        if is_on_target_knockdown(
             adata_,
             target_gene=pert,
             perturbation_column=perturbation_column,
             control_label=control_label,
             residual_expression=residual_expression,
             layer=layer,
-        )
-        if keep:
+        ):
             perts_to_keep.append(pert)
 
-    perts_to_keep.append(control_label)  # ensure controls are retained
-    subset_idx = np.where(adata_.obs[perturbation_column].isin(perts_to_keep))[0]
-    return adata[subset_idx]
+    # ---------- stage 2: cell filter ----------
+    keep_mask = np.zeros(adata_.n_obs, dtype=bool)
+    keep_mask[control_cells] = True  # retain all controls
+
+    # cache control means to avoid recomputation
+    control_mean_cache: Dict[str, float] = {}
+
+    for pert in perts_to_keep:
+        if pert == control_label:
+            continue
+
+        if pert not in adata_.var_names:
+            continue
+
+        gene_idx = adata_.var_names.get_loc(pert)
+
+        # control mean for this gene
+        if pert not in control_mean_cache:
+            ctrl_mean = _mean(X[control_cells, gene_idx])
+            if ctrl_mean == 0:
+                raise ValueError(
+                    f"Mean {pert!r} expression in control cells is zero; "
+                    "cannot compute knock-down ratio."
+                )
+            control_mean_cache[pert] = ctrl_mean
+        else:
+            ctrl_mean = control_mean_cache[pert]
+
+        pert_cells = perts == pert
+        expr_vals = (
+            X[pert_cells, gene_idx].A1 if sp.issparse(X) else X[pert_cells, gene_idx]
+        )
+        ratios = expr_vals / ctrl_mean
+        keep_mask[pert_cells] = ratios < cell_residual_expression
+
+    # ---------- stage 3: minimum-cell filter ----------
+    for pert in perts.unique():
+        if pert == control_label:
+            continue
+        # cells of this perturbation *still* kept after stages 1-2
+        pert_mask = (perts == pert) & keep_mask
+        if pert_mask.sum() < min_cells:
+            keep_mask[pert_mask] = False  # drop them
+
+    # return view with all criteria satisfied
+    return adata_[keep_mask]
 
 
 def set_var_index_to_col(adata: ad.AnnData, col: str = "col", copy=True) -> None:
