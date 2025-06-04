@@ -272,7 +272,7 @@ class PerturbationDataModule(LightningDataModule):
         else:
             output_dim = input_dim  # training on raw gene expression
 
-        gene_names = underlying_ds.get_gene_names()
+        gene_names = underlying_ds.get_gene_names(output_space=self.output_space)
 
         # get the shape of the first value in pert_onehot_map
         pert_dim = next(iter(self.pert_onehot_map.values())).shape[0]

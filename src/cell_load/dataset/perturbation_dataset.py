@@ -324,7 +324,7 @@ class PerturbationDataset(Dataset):
         try:
             raw = self.h5_file["var/gene_name"][:]
             if output_space == "gene":
-                hvg_mask = self.h5_file['/var/highly_variable'][:]
+                hvg_mask = self.h5_file["/var/highly_variable"][:]
                 raw = raw[hvg_mask]
             return [_decode(x) for x in raw]
         except KeyError:
@@ -332,14 +332,14 @@ class PerturbationDataset(Dataset):
                 cats = self.h5_file["var/gene_name/categories"][:]
                 codes = self.h5_file["var/gene_name/codes"][:]
                 if output_space == "gene":
-                    hvg_mask = self.h5_file['/var/highly_variable'][:]
+                    hvg_mask = self.h5_file["/var/highly_variable"][:]
                     codes = codes[hvg_mask]
                 decoded = [_decode(x) for x in cats]
                 return [decoded[i] for i in codes]
             except KeyError:
                 fallback = self.h5_file["var/_index"][:]
                 if output_space == "gene":
-                    hvg_mask = self.h5_file['/var/highly_variable'][:]
+                    hvg_mask = self.h5_file["/var/highly_variable"][:]
                     fallback = fallback[hvg_mask]
                 return [_decode(x) for x in fallback]
 
