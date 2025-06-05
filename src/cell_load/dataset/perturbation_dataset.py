@@ -8,7 +8,11 @@ import torch
 from torch.utils.data import Dataset, Subset
 
 from ..mapping_strategies import BaseMappingStrategy
-from ..utils.data_utils import GlobalH5MetadataCache, suspected_discrete_torch
+from ..utils.data_utils import (
+    GlobalH5MetadataCache,
+    suspected_discrete_torch,
+    suspected_log_torch,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -323,7 +327,10 @@ class PerturbationDataset(Dataset):
 
         try:
             raw = self.h5_file["var/gene_name"][:]
-            if output_space == "gene":
+            if (
+                output_space == "gene"
+                and "highly_variable" in self.h5_file["/var"].keys()
+            ):
                 hvg_mask = self.h5_file["/var/highly_variable"][:]
                 raw = raw[hvg_mask]
             return [_decode(x) for x in raw]
@@ -331,14 +338,20 @@ class PerturbationDataset(Dataset):
             try:
                 cats = self.h5_file["var/gene_name/categories"][:]
                 codes = self.h5_file["var/gene_name/codes"][:]
-                if output_space == "gene":
+                if (
+                    output_space == "gene"
+                    and "highly_variable" in self.h5_file["/var"].keys()
+                ):
                     hvg_mask = self.h5_file["/var/highly_variable"][:]
                     codes = codes[hvg_mask]
                 decoded = [_decode(x) for x in cats]
                 return [decoded[i] for i in codes]
             except KeyError:
                 fallback = self.h5_file["var/_index"][:]
-                if output_space == "gene":
+                if (
+                    output_space == "gene"
+                    and "highly_variable" in self.h5_file["/var"].keys()
+                ):
                     hvg_mask = self.h5_file["/var/highly_variable"][:]
                     fallback = fallback[hvg_mask]
                 return [_decode(x) for x in fallback]
@@ -405,7 +418,9 @@ class PerturbationDataset(Dataset):
         if has_pert_cell_counts:
             pert_cell_counts = torch.stack(pert_cell_counts_list)
 
-            already_logged = suspected_discrete_torch(pert_cell_counts)
+            is_discrete = suspected_discrete_torch(pert_cell_counts)
+            is_log = suspected_log_torch(pert_cell_counts)
+            already_logged = (not is_discrete) and is_log
 
             if already_logged:  # counts are already log transformed
                 if (
@@ -423,7 +438,9 @@ class PerturbationDataset(Dataset):
         if has_ctrl_cell_counts:
             ctrl_cell_counts = torch.stack(ctrl_cell_counts_list)
 
-            already_logged = suspected_discrete_torch(ctrl_cell_counts)
+            is_discrete = suspected_discrete_torch(pert_cell_counts)
+            is_log = suspected_log_torch(pert_cell_counts)
+            already_logged = (not is_discrete) and is_log
 
             if already_logged:  # counts are already log transformed
                 if (
