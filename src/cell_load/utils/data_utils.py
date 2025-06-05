@@ -227,6 +227,11 @@ def suspected_discrete_torch(x: torch.Tensor, n_cells: int = 100) -> bool:
     frac_part = rowsum - rowsum.floor()
     return torch.all(torch.abs(frac_part) < 1e-7)
 
+def suspected_log_torch(x: torch.Tensor) -> bool:
+    """Check if the data is log transformed already.
+    """
+    global_max = x.max()
+    return global_max.item() < 25.0
 
 def _mean(expr) -> float:
     """Return the mean of a dense or sparse 1-D/2-D slice."""
