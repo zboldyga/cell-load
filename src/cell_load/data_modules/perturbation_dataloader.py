@@ -152,7 +152,7 @@ class PerturbationDataModule(LightningDataModule):
         self.all_perts: Set[str] = set()
         self.pert_onehot_map: Optional[Dict[str, torch.Tensor]] = None
         self.batch_onehot_map: Optional[Dict[str, torch.Tensor]] = None
-        self.celltype_onehot_map: Optional[Dict[str, torch.Tensor]] = None
+        self.cell_type_onehot_map: Optional[Dict[str, torch.Tensor]] = None
 
         # Initialize global maps
         self._setup_global_maps()
@@ -400,6 +400,7 @@ class PerturbationDataModule(LightningDataModule):
         """
         all_perts = set()
         all_batches = set()
+        all_celltypes = set()
 
         for dataset_name in self.config.get_all_datasets():
             dataset_path = Path(self.config.datasets[dataset_name])
@@ -417,6 +418,13 @@ class PerturbationDataModule(LightningDataModule):
                         batch_arr = f[f"obs/{self.batch_col}"][:]
                     batches = set(safe_decode_array(batch_arr))
                     all_batches.update(batches)
+
+                    try:
+                        celltype_arr = f[f"obs/{self.cell_type_key}/categories"][:]
+                    except KeyError:
+                        celltype_arr = f[f"obs/{self.cell_type_key}"][:]
+                    celltypes = set(safe_decode_array(celltype_arr))
+                    all_celltypes.update(celltypes)
 
         # Create one-hot maps
         if self.perturbation_features_file:
@@ -437,7 +445,9 @@ class PerturbationDataModule(LightningDataModule):
         else:
             # Fall back to default: generate one-hot mapping
             self.pert_onehot_map = generate_onehot_map(all_perts)
+
         self.batch_onehot_map = generate_onehot_map(all_batches)
+        self.cell_type_onehot_map = generate_onehot_map(all_celltypes)
 
     def _create_base_dataset(
         self, dataset_name: str, fpath: Path
@@ -456,6 +466,7 @@ class PerturbationDataModule(LightningDataModule):
             embed_key=self.embed_key,
             pert_onehot_map=self.pert_onehot_map,
             batch_onehot_map=self.batch_onehot_map,
+            cell_type_onehot_map=self.cell_type_onehot_map,
             pert_col=self.pert_col,
             cell_type_key=self.cell_type_key,
             batch_col=self.batch_col,
@@ -674,78 +685,3 @@ class PerturbationDataModule(LightningDataModule):
             counts["train"] = len(subset)
 
         return counts
-
-    def _setup_global_celltype_map(self):
-        """
-        Create a global cell type map across all H5 files in train+test specs,
-        so that each dataset can use a consistent one-hot scheme.
-        """
-        dataset_files = {spec.dataset for spec in (self.train_specs + self.test_specs)}
-        # For each dataset, gather all .h5 files and read out the pert categories
-        all_celltypes = set()
-        for ds_name in dataset_files:
-            files_dict = self._find_dataset_files(ds_name)
-            for file_path in files_dict.values():
-                with h5py.File(file_path, "r") as f:
-                    cats = [
-                        x.decode("utf-8")
-                        for x in f[f"obs/{self.cell_type_key}/categories"][:]
-                    ]
-                    all_celltypes.update(cats)
-
-        if len(all_celltypes) == 0:
-            raise ValueError("No cell types found across datasets?")
-
-        self.celltype_onehot_map = generate_onehot_map(all_celltypes)
-        self.num_celltypes = len(self.celltype_onehot_map)
-
-    def _setup_global_pert_map(self):
-        """
-        Create a global perturbation map across all H5 files in train+test specs,
-        so that each dataset can use a consistent one-hot scheme.
-        """
-        dataset_files = {spec.dataset for spec in (self.train_specs + self.test_specs)}
-        # For each dataset, gather all .h5 files and read out the pert categories
-        all_perts = set()
-        for ds_name in dataset_files:
-            files_dict = self._find_dataset_files(ds_name)
-            for file_path in files_dict.values():
-                with h5py.File(file_path, "r") as f:
-                    cats = [
-                        x.decode("utf-8")
-                        for x in f[f"obs/{self.pert_col}/categories"][:]
-                    ]
-                    all_perts.update(cats)
-
-        if len(all_perts) == 0:
-            raise ValueError("No perturbations found across datasets?")
-
-        self.pert_onehot_map = generate_onehot_map(all_perts)
-        self.num_perts = len(self.pert_onehot_map)
-
-    def _setup_global_batch_map(self):
-        """
-        Create a global gem_group / batch map across all H5 files in train+test specs,
-        so that each dataset can use a consistent one-hot scheme.
-        """
-        dataset_files = {spec.dataset for spec in (self.train_specs + self.test_specs)}
-        # For each dataset, gather all .h5 files and read out the pert categories
-        all_batches = set()
-        for ds_name in dataset_files:
-            files_dict = self._find_dataset_files(ds_name)
-            for file_path in files_dict.values():
-                with h5py.File(file_path, "r") as f:
-                    try:
-                        cats = [
-                            x.decode("utf-8")
-                            for x in f[f"obs/{self.pert_col}/categories"][:]
-                        ]
-                    except KeyError:
-                        cats = f[f"obs/{self.pert_col}"][:].astype(str)
-                    all_batches.update(cats)
-
-        if len(all_batches) == 0:
-            raise ValueError("No perturbations found across datasets?")
-
-        self.batch_onehot_map = generate_onehot_map(all_batches)
-        self.num_batches = len(self.batch_onehot_map)

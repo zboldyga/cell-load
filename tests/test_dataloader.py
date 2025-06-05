@@ -447,6 +447,7 @@ def test_collate_fn_shapes_and_keys(synthetic_data):
             "pert_emb",
             "pert_name",
             "cell_type",
+            "cell_type_onehot",
             "batch",
             "batch_name",
         ):
@@ -477,6 +478,7 @@ def test_collate_fn_shapes_and_keys(synthetic_data):
             "pert_emb",
             "pert_name",
             "cell_type",
+            "cell_type_onehot",
             "batch",
             "batch_name",
         ):

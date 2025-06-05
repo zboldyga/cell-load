@@ -30,6 +30,7 @@ class PerturbationDataset(Dataset):
         mapping_strategy: BaseMappingStrategy,
         pert_onehot_map: Optional[Dict[str, torch.Tensor]] = None,
         batch_onehot_map: Optional[Dict[str, torch.Tensor]] = None,
+        cell_type_onehot_map: Optional[Dict[str, torch.Tensor]] = None,
         pert_col: str = "gene",
         cell_type_key: str = "cell_type",
         batch_col: str = "gem_group",
@@ -68,6 +69,7 @@ class PerturbationDataset(Dataset):
         self.mapping_strategy = mapping_strategy
         self.pert_onehot_map = pert_onehot_map
         self.batch_onehot_map = batch_onehot_map
+        self.cell_type_onehot_map = cell_type_onehot_map
         self.pert_col = pert_col
         self.cell_type_key = cell_type_key
         self.batch_col = batch_col
@@ -160,6 +162,9 @@ class PerturbationDataset(Dataset):
         cell_type = self.cell_type_categories[
             self.metadata_cache.cell_type_codes[file_idx]
         ]
+        cell_type_onehot = (
+            self.cell_type_onehot_map.get(cell_type) if self.cell_type_onehot_map else None
+        )
 
         # Batch info
         batch_code = self.metadata_cache.batch_codes[file_idx]
@@ -173,9 +178,10 @@ class PerturbationDataset(Dataset):
             "ctrl_cell_emb": ctrl_expr,
             "pert_emb": pert_onehot,
             "pert_name": pert_name,
-            "cell_type": cell_type,
-            "batch": batch_onehot,
             "batch_name": batch_name,
+            "batch": batch_onehot,
+            "cell_type": cell_type,
+            "cell_type_onehot": cell_type_onehot,
         }
 
         # Optionally include raw expressions for the perturbed cell, for training a decoder
@@ -374,6 +380,7 @@ class PerturbationDataset(Dataset):
         pert_emb_list = [None] * batch_size
         pert_name_list = [None] * batch_size
         cell_type_list = [None] * batch_size
+        cell_type_onehot_list = [None] * batch_size
         batch_list = [None] * batch_size
         batch_name_list = [None] * batch_size
 
@@ -395,6 +402,7 @@ class PerturbationDataset(Dataset):
             pert_emb_list[i] = item["pert_emb"]
             pert_name_list[i] = item["pert_name"]
             cell_type_list[i] = item["cell_type"]
+            cell_type_onehot_list[i] = item["cell_type_onehot"]
             batch_list[i] = item["batch"]
             batch_name_list[i] = item["batch_name"]
 
@@ -411,6 +419,7 @@ class PerturbationDataset(Dataset):
             "pert_emb": torch.stack(pert_emb_list),
             "pert_name": pert_name_list,
             "cell_type": cell_type_list,
+            "cell_type_onehot": torch.stack(cell_type_onehot_list),
             "batch": torch.stack(batch_list),
             "batch_name": batch_name_list,
         }
