@@ -163,7 +163,9 @@ class PerturbationDataset(Dataset):
             self.metadata_cache.cell_type_codes[file_idx]
         ]
         cell_type_onehot = (
-            self.cell_type_onehot_map.get(cell_type) if self.cell_type_onehot_map else None
+            self.cell_type_onehot_map.get(cell_type)
+            if self.cell_type_onehot_map
+            else None
         )
 
         # Batch info
