@@ -165,7 +165,7 @@ class PerturbationDataModule(LightningDataModule):
         if len(self.test_datasets) == 0:
             raise ValueError("No test datasets available to extract variable names.")
         underlying_ds: PerturbationDataset = self.test_datasets[0].dataset
-        return underlying_ds.get_gene_names()
+        return underlying_ds.get_gene_names(output_space=self.output_space)
 
     def setup(self, stage: Optional[str] = None):
         """
