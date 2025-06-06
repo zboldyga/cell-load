@@ -233,7 +233,6 @@ class PerturbationDataModule(LightningDataModule):
             input_dim = underlying_ds.n_genes
 
         gene_dim = underlying_ds.n_genes
-        # gene_dim = underlying_ds.get_num_hvgs()
         try:
             hvg_dim = underlying_ds.get_num_hvgs()
         except:
