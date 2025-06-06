@@ -1,8 +1,11 @@
 import logging
+from typing import TYPE_CHECKING
 
 import numpy as np
 
-from ..dataset import PerturbationDataset
+if TYPE_CHECKING:
+    from ..dataset import PerturbationDataset
+
 from .mapping_strategies import BaseMappingStrategy
 
 logger = logging.getLogger(__name__)
@@ -33,7 +36,7 @@ class BatchMappingStrategy(BaseMappingStrategy):
 
     def register_split_indices(
         self,
-        dataset: PerturbationDataset,
+        dataset: "PerturbationDataset",
         split: str,
         _perturbed_indices: np.ndarray,
         control_indices: np.ndarray,
@@ -51,7 +54,7 @@ class BatchMappingStrategy(BaseMappingStrategy):
             self.split_control_maps[split][key].append(idx)
 
     def get_control_indices(
-        self, dataset: PerturbationDataset, split: str, perturbed_idx: int
+        self, dataset: "PerturbationDataset", split: str, perturbed_idx: int
     ) -> np.ndarray:
         """
         Return n_basal_samples control indices for the perturbed cell that are
@@ -82,7 +85,7 @@ class BatchMappingStrategy(BaseMappingStrategy):
         return self.rng.choice(pool, size=self.n_basal_samples, replace=True)
 
     def get_control_index(
-        self, dataset: PerturbationDataset, split: str, perturbed_idx: int
+        self, dataset: "PerturbationDataset", split: str, perturbed_idx: int
     ):
         """
         Returns a single control index for the perturbed cell.
