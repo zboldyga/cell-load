@@ -3,7 +3,7 @@ import time
 from typing import Iterator, List
 
 import numpy as np
-from torch.utils.data import Sampler
+from torch.utils.data import Sampler, Subset
 
 from ..dataset import MetadataConcatDataset, PerturbationDataset
 from ..utils.data_utils import H5MetadataCache
@@ -122,7 +122,7 @@ class PerturbationBatchSampler(Sampler):
 
         return all_batches
 
-    def _process_subset(self, global_offset: int, subset: "Subset") -> List[List[int]]:
+    def _process_subset(self, global_offset: int, subset: Subset) -> List[List[int]]:
         """
         Process a single subset to create batches based on H5 codes.
 
