@@ -354,7 +354,7 @@ def filter_on_target_knockdown(
     keep_mask[control_cells] = True  # retain all controls
 
     # cache control means to avoid recomputation
-    control_mean_cache: Dict[str, float] = {}
+    control_mean_cache: dict[str, float] = {}
 
     for pert in perts_to_keep:
         if pert == control_label:
