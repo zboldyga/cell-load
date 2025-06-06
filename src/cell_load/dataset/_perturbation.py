@@ -520,7 +520,7 @@ class PerturbationDataset(Dataset):
                 try:
                     indices = self.h5_file["X/indices"][:]
                     n_cols = indices.max() + 1
-                except:
+                except KeyError:
                     n_cols = self.h5_file["obsm/X_hvg"].shape[1]
         return n_cols
 
