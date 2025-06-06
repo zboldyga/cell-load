@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from enum import Enum
-from typing import List, Optional
+from typing import Optional
 
 
 class TaskType(Enum):
@@ -26,7 +26,7 @@ class TaskSpec:
     task_type: TaskType = TaskType.ZEROSHOT
 
 
-def parse_dataset_specs(specs: List[str]) -> List[TaskSpec]:
+def parse_dataset_specs(specs: list[str]) -> list[TaskSpec]:
     """Parse dataset specifications into TaskSpec objects
 
     Format: dataset[_celltype][,tasktype]

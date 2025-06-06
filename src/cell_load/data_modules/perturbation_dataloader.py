@@ -1,6 +1,6 @@
 import logging
 from pathlib import Path
-from typing import Dict, List, Literal, Optional, Set
+from typing import Literal, Optional, Set
 
 import h5py
 import numpy as np
@@ -118,14 +118,14 @@ class PerturbationDataModule(LightningDataModule):
         )
 
         # Prepare dataset lists and maps
-        self.train_datasets: List[Dataset] = []
-        self.val_datasets: List[Dataset] = []
-        self.test_datasets: List[Dataset] = []
+        self.train_datasets: list[Dataset] = []
+        self.val_datasets: list[Dataset] = []
+        self.test_datasets: list[Dataset] = []
 
         self.all_perts: Set[str] = set()
-        self.pert_onehot_map: Optional[Dict[str, torch.Tensor]] = None
-        self.batch_onehot_map: Optional[Dict[str, torch.Tensor]] = None
-        self.cell_type_onehot_map: Optional[Dict[str, torch.Tensor]] = None
+        self.pert_onehot_map: Optional[dict[str, torch.Tensor]] = None
+        self.batch_onehot_map: Optional[dict[str, torch.Tensor]] = None
+        self.cell_type_onehot_map: Optional[dict[str, torch.Tensor]] = None
 
         # Initialize global maps
         self._setup_global_maps()
@@ -332,7 +332,7 @@ class PerturbationDataModule(LightningDataModule):
 
     def _create_dataloader(
         self,
-        datasets: List[Dataset],
+        datasets: list[Dataset],
         test: bool = False,
         batch_size: Optional[int] = None,
     ):
@@ -532,8 +532,8 @@ class PerturbationDataModule(LightningDataModule):
         pert_indices: np.ndarray,
         ctrl_indices: np.ndarray,
         cache,
-        pert_config: Dict[str, List[str]],
-    ) -> Dict[str, int]:
+        pert_config: dict[str, list[str]],
+    ) -> dict[str, int]:
         """Split a fewshot cell type according to perturbation assignments."""
         counts = {"train": 0, "val": 0, "test": 0}
 
@@ -603,8 +603,8 @@ class PerturbationDataModule(LightningDataModule):
 
         return counts
 
-    def _find_dataset_files(self, dataset_path: Path) -> Dict[str, Path]:
-        files: Dict[str, Path] = {}
+    def _find_dataset_files(self, dataset_path: Path) -> dict[str, Path]:
+        files: dict[str, Path] = {}
         for ext in ("*.h5", "*.h5ad"):
             for fpath in sorted(dataset_path.glob(ext)):
                 # fpath.stem will already be e.g. "CT0" for "CT0.h5ad" or "CT0.h5"
@@ -620,10 +620,10 @@ class PerturbationDataModule(LightningDataModule):
         pert_indices: np.ndarray,
         cache,
         dataset_name: str,
-        zeroshot_celltypes: Dict[str, str],
-        fewshot_celltypes: Dict[str, Dict[str, List[str]]],
+        zeroshot_celltypes: dict[str, str],
+        fewshot_celltypes: dict[str, dict[str, list[str]]],
         is_training_dataset: bool,
-    ) -> Dict[str, int]:
+    ) -> dict[str, int]:
         """Process a single cell type and return counts for each split."""
         counts = {"train": 0, "val": 0, "test": 0}
 

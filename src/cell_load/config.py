@@ -2,7 +2,7 @@
 import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Set
+from typing import Set
 
 import toml
 
@@ -14,16 +14,16 @@ class ExperimentConfig:
     """Configuration for perturbation experiments from TOML file."""
 
     # Dataset paths
-    datasets: Dict[str, str]
+    datasets: dict[str, str]
 
     # Training datasets (entire datasets)
-    training: Dict[str, str]
+    training: dict[str, str]
 
     # Zeroshot cell types (dataset.celltype -> split)
-    zeroshot: Dict[str, str]
+    zeroshot: dict[str, str]
 
     # Fewshot perturbation assignments (dataset.celltype -> {split: [perts]})
-    fewshot: Dict[str, Dict[str, List[str]]]
+    fewshot: dict[str, dict[str, list[str]]]
 
     @classmethod
     def from_toml(cls, toml_path: str) -> "ExperimentConfig":
@@ -54,7 +54,7 @@ class ExperimentConfig:
 
         return datasets
 
-    def get_zeroshot_celltypes(self, dataset: str) -> Dict[str, str]:
+    def get_zeroshot_celltypes(self, dataset: str) -> dict[str, str]:
         """Get zeroshot cell types for a dataset and their target splits."""
         result = {}
         for key, split in self.zeroshot.items():
@@ -63,7 +63,7 @@ class ExperimentConfig:
                 result[celltype] = split
         return result
 
-    def get_fewshot_celltypes(self, dataset: str) -> Dict[str, Dict[str, List[str]]]:
+    def get_fewshot_celltypes(self, dataset: str) -> dict[str, dict[str, list[str]]]:
         """Get fewshot cell types for a dataset and their perturbation assignments."""
         result = {}
         for key, pert_config in self.fewshot.items():

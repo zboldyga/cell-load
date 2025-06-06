@@ -1,6 +1,6 @@
 import logging
 from pathlib import Path
-from typing import Dict, List, Optional, Union
+from typing import Optional, Union
 
 import h5py
 import numpy as np
@@ -28,9 +28,9 @@ class PerturbationDataset(Dataset):
         name: str,
         h5_path: Union[str, Path],
         mapping_strategy: BaseMappingStrategy,
-        pert_onehot_map: Optional[Dict[str, torch.Tensor]] = None,
-        batch_onehot_map: Optional[Dict[str, torch.Tensor]] = None,
-        cell_type_onehot_map: Optional[Dict[str, torch.Tensor]] = None,
+        pert_onehot_map: Optional[dict[str, torch.Tensor]] = None,
+        batch_onehot_map: Optional[dict[str, torch.Tensor]] = None,
+        cell_type_onehot_map: Optional[dict[str, torch.Tensor]] = None,
         pert_col: str = "gene",
         cell_type_key: str = "cell_type",
         batch_col: str = "gem_group",
@@ -320,7 +320,7 @@ class PerturbationDataset(Dataset):
         row_data = self.h5_file[f"/obsm/{key}"][idx]
         return torch.tensor(row_data, dtype=torch.float32)
 
-    def get_gene_names(self, output_space="all") -> List[str]:
+    def get_gene_names(self, output_space="all") -> list[str]:
         """
         Return the list of gene names from var/gene_name (or its categorical fallback).
 
