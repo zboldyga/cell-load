@@ -1,4 +1,5 @@
 import logging
+from functools import partial
 from pathlib import Path
 from typing import Literal, Set
 
@@ -338,9 +339,7 @@ class PerturbationDataModule(LightningDataModule):
     ):
         """Create a DataLoader with appropriate configuration."""
         use_int_counts = "int_counts" in self.__dict__ and self.int_counts
-        collate_fn = lambda batch: PerturbationDataset.collate_fn(
-            batch, int_counts=use_int_counts
-        )
+        collate_fn = partial(PerturbationDataset.collate_fn, int_counts=use_int_counts)
 
         ds = MetadataConcatDataset(datasets)
         use_batch = self.basal_mapping_strategy == "batch"
