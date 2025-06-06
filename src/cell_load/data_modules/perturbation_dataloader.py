@@ -1,17 +1,16 @@
 import logging
-from collections import defaultdict
 from pathlib import Path
-from typing import Dict, List, Literal, Optional, Set, Tuple
+from typing import Dict, List, Literal, Optional, Set
 
 import h5py
 import numpy as np
 import torch
 from lightning.pytorch import LightningDataModule
-from torch.utils.data import ConcatDataset, DataLoader, Dataset
+from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
 
 from ..config import ExperimentConfig
-from ..dataset.perturbation_dataset import PerturbationDataset
+from ..dataset import MetadataConcatDataset, PerturbationDataset
 from ..mapping_strategies import BatchMappingStrategy, RandomMappingStrategy
 from ..utils.data_utils import (
     GlobalH5MetadataCache,
@@ -21,32 +20,6 @@ from ..utils.data_utils import (
 from .samplers import PerturbationBatchSampler
 
 logger = logging.getLogger(__name__)
-
-
-class MetadataConcatDataset(ConcatDataset):
-    """
-    ConcatDataset that enforces consistent metadata across all constituent datasets.
-    """
-
-    def __init__(self, datasets: List[Dataset]):
-        super().__init__(datasets)
-        base = datasets[0].dataset
-        self.embed_key = base.embed_key
-        self.control_pert = base.control_pert
-        self.pert_col = base.pert_col
-        self.batch_col = base.batch_col
-
-        for ds in datasets:
-            md = ds.dataset
-            if (
-                md.embed_key != self.embed_key
-                or md.control_pert != self.control_pert
-                or md.pert_col != self.pert_col
-                or md.batch_col != self.batch_col
-            ):
-                raise ValueError(
-                    "All datasets must share the same embed_key, control_pert, pert_col, and batch_col"
-                )
 
 
 class PerturbationDataModule(LightningDataModule):

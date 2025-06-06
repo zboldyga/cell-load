@@ -5,7 +5,7 @@ from typing import Iterator, List
 import numpy as np
 from torch.utils.data import Sampler
 
-from ..dataset.perturbation_dataset import PerturbationDataset
+from ..dataset import MetadataConcatDataset, PerturbationDataset
 from ..utils.data_utils import H5MetadataCache
 
 logger = logging.getLogger(__name__)
