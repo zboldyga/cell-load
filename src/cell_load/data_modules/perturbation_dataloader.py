@@ -236,7 +236,7 @@ class PerturbationDataModule(LightningDataModule):
         gene_dim = underlying_ds.n_genes
         try:
             hvg_dim = underlying_ds.get_num_hvgs()
-        except:
+        except AttributeError:
             assert self.embed_key is None, "No X_hvg detected, using raw .X"
             hvg_dim = gene_dim
 
