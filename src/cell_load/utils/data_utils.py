@@ -1,13 +1,13 @@
 import logging
 import warnings
+from typing import Optional
 
 import anndata
 import h5py
 import numpy as np
+import scipy.sparse as sp
 import torch
 
-import scipy.sparse as sp
-from typing import List, Optional
 from .singleton import Singleton
 
 log = logging.getLogger(__name__)
