@@ -1,6 +1,6 @@
 import logging
 from pathlib import Path
-from typing import Literal, Optional, Set
+from typing import Literal, Set
 
 import h5py
 import numpy as np
@@ -39,7 +39,7 @@ class PerturbationDataModule(LightningDataModule):
         batch_col: str = "gem_group",
         cell_type_key: str = "cell_type",
         control_pert: str = "non-targeting",
-        embed_key: Optional[Literal["X_hvg", "X_state"]] = None,
+        embed_key: Literal["X_hvg", "X_state"] | None = None,
         output_space: Literal["gene", "all"] = "gene",
         basal_mapping_strategy: Literal["batch", "random"] = "random",
         n_basal_samples: int = 1,
@@ -123,9 +123,9 @@ class PerturbationDataModule(LightningDataModule):
         self.test_datasets: list[Dataset] = []
 
         self.all_perts: Set[str] = set()
-        self.pert_onehot_map: Optional[dict[str, torch.Tensor]] = None
-        self.batch_onehot_map: Optional[dict[str, torch.Tensor]] = None
-        self.cell_type_onehot_map: Optional[dict[str, torch.Tensor]] = None
+        self.pert_onehot_map: dict[str, torch.Tensor] | None = None
+        self.batch_onehot_map: dict[str, torch.Tensor] | None = None
+        self.cell_type_onehot_map: dict[str, torch.Tensor] | None = None
 
         # Initialize global maps
         self._setup_global_maps()
@@ -140,7 +140,7 @@ class PerturbationDataModule(LightningDataModule):
         underlying_ds: PerturbationDataset = self.test_datasets[0].dataset
         return underlying_ds.get_gene_names(output_space=self.output_space)
 
-    def setup(self, stage: Optional[str] = None):
+    def setup(self, stage: str | None = None):
         """
         Set up training and test datasets.
         """
@@ -334,7 +334,7 @@ class PerturbationDataModule(LightningDataModule):
         self,
         datasets: list[Dataset],
         test: bool = False,
-        batch_size: Optional[int] = None,
+        batch_size: int | None = None,
     ):
         """Create a DataLoader with appropriate configuration."""
         use_int_counts = "int_counts" in self.__dict__ and self.int_counts

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from abc import ABC, abstractmethod
-from typing import Optional, Tuple
+from typing import Tuple
 
 import numpy as np
 import torch
@@ -76,7 +76,7 @@ class BaseMappingStrategy(ABC):
         pass
 
     @abstractmethod
-    def get_control_index(self, dataset, split, perturbed_idx) -> Optional[int]:
+    def get_control_index(self, dataset, split, perturbed_idx) -> int | None:
         pass
 
     def get_mapped_expressions(

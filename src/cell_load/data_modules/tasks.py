@@ -1,6 +1,5 @@
 from dataclasses import dataclass
 from enum import Enum
-from typing import Optional
 
 
 class TaskType(Enum):
@@ -22,7 +21,7 @@ class TaskSpec:
     """Specification for a training or testing task"""
 
     dataset: str  # e.g. "replogle"
-    cell_type: Optional[str] = None  # e.g. "jurkat"
+    cell_type: str | None = None  # e.g. "jurkat"
     task_type: TaskType = TaskType.ZEROSHOT
 
 

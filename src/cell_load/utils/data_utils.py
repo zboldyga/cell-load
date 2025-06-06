@@ -1,6 +1,5 @@
 import logging
 import warnings
-from typing import Optional
 
 import anndata
 import h5py
@@ -247,7 +246,7 @@ def is_on_target_knockdown(
     perturbation_column: str = "gene",
     control_label: str = "non-targeting",
     residual_expression: float = 0.30,
-    layer: Optional[str] = None,
+    layer: str | None = None,
 ) -> bool:
     """
     True ⇢ average expression of *target_gene* in perturbed cells is below
@@ -314,7 +313,7 @@ def filter_on_target_knockdown(
     residual_expression: float = 0.30,  # perturbation-level threshold
     cell_residual_expression: float = 0.50,  # cell-level threshold
     min_cells: int = 30,  # **NEW**: minimum cells/perturbation
-    layer: Optional[str] = None,
+    layer: str | None = None,
     var_gene_name: str = "gene_name",
 ) -> anndata.AnnData:
     """
