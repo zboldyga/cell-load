@@ -334,7 +334,12 @@ class PerturbationDataset(Dataset):
             return x.decode("utf-8") if isinstance(x, (bytes, bytearray)) else str(x)
 
         try:
-            raw = self.h5_file["var/gene_name"][:]
+            if "var/gene_name/codes" in self.h5_file and "var/gene_name/categories" in self.h5_file:
+                gene_codes = self.h5_file["var/gene_name/codes"][:]
+                gene_categories = self.h5_file["var/gene_name/categories"][:]
+                raw = gene_categories[gene_codes]
+            else:
+                raw = self.h5_file["var/gene_name"][:]
             if (
                 output_space == "gene"
                 and "highly_variable" in self.h5_file["/var"].keys()
