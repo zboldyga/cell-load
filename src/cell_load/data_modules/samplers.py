@@ -1,11 +1,11 @@
 import logging
 import time
-from typing import Iterator, List
+from typing import Iterator
 
 import numpy as np
-from torch.utils.data import Sampler
+from torch.utils.data import Sampler, Subset
 
-from ..dataset.perturbation_dataset import PerturbationDataset
+from ..dataset import MetadataConcatDataset, PerturbationDataset
 from ..utils.data_utils import H5MetadataCache
 
 logger = logging.getLogger(__name__)
@@ -80,7 +80,7 @@ class PerturbationBatchSampler(Sampler):
             f"Sampler created with {len(self.batches)} batches in {end_time - start_time:.2f} seconds."
         )
 
-    def _create_batches(self) -> List[List[int]]:
+    def _create_batches(self) -> list[list[int]]:
         """
         Combines existing batches into meta-batches of size batch_size * cell_sentence_len,
         sampling with replacement if needed to reach cell_sentence_len.
@@ -122,7 +122,7 @@ class PerturbationBatchSampler(Sampler):
 
         return all_batches
 
-    def _process_subset(self, global_offset: int, subset: "Subset") -> List[List[int]]:
+    def _process_subset(self, global_offset: int, subset: Subset) -> list[list[int]]:
         """
         Process a single subset to create batches based on H5 codes.
 
@@ -182,7 +182,7 @@ class PerturbationBatchSampler(Sampler):
 
         return subset_batches
 
-    def _create_sentences(self) -> List[List[int]]:
+    def _create_sentences(self) -> list[list[int]]:
         """
         Process each subset sequentially (across all datasets) and combine the batches.
         """
@@ -196,7 +196,7 @@ class PerturbationBatchSampler(Sampler):
         np.random.shuffle(all_batches)
         return all_batches
 
-    def __iter__(self) -> Iterator[List[int]]:
+    def __iter__(self) -> Iterator[list[int]]:
         # Shuffle the order of batches each time we iterate.
         np.random.shuffle(self.batches)
         yield from self.batches

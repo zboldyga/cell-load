@@ -131,8 +131,8 @@ yielded will be `batch_size * cell_sentence_len`. The kwargs are:
 name: PerturbationDataModule
 kwargs:
   # Required parameters
-  train_specs: []                   # List[TaskSpec], required
-  test_specs: []                    # List[TaskSpec], required
+  train_specs: []                   # list[TaskSpec], required
+  test_specs: []                    # list[TaskSpec], required
   data_dir: ""                      # str, path to root of per-dataset subfolders
   
   # Optional parameters with defaults

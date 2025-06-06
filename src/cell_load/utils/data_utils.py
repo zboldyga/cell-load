@@ -4,10 +4,9 @@ import warnings
 import anndata
 import h5py
 import numpy as np
+import scipy.sparse as sp
 import torch
 
-import scipy.sparse as sp
-from typing import List, Optional
 from .singleton import Singleton
 
 log = logging.getLogger(__name__)
@@ -247,7 +246,7 @@ def is_on_target_knockdown(
     perturbation_column: str = "gene",
     control_label: str = "non-targeting",
     residual_expression: float = 0.30,
-    layer: Optional[str] = None,
+    layer: str | None = None,
 ) -> bool:
     """
     True ⇢ average expression of *target_gene* in perturbed cells is below
@@ -314,7 +313,7 @@ def filter_on_target_knockdown(
     residual_expression: float = 0.30,  # perturbation-level threshold
     cell_residual_expression: float = 0.50,  # cell-level threshold
     min_cells: int = 30,  # **NEW**: minimum cells/perturbation
-    layer: Optional[str] = None,
+    layer: str | None = None,
     var_gene_name: str = "gene_name",
 ) -> anndata.AnnData:
     """
@@ -354,7 +353,7 @@ def filter_on_target_knockdown(
     keep_mask[control_cells] = True  # retain all controls
 
     # cache control means to avoid recomputation
-    control_mean_cache: Dict[str, float] = {}
+    control_mean_cache: dict[str, float] = {}
 
     for pert in perts_to_keep:
         if pert == control_label:

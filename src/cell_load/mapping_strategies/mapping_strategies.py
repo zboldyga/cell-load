@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import logging
 from abc import ABC, abstractmethod
-from typing import Optional, Tuple
+from typing import TYPE_CHECKING, Tuple
 
 import numpy as np
 import torch
+
+if TYPE_CHECKING:
+    from ..dataset import PerturbationDataset
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +56,7 @@ class BaseMappingStrategy(ABC):
     @abstractmethod
     def register_split_indices(
         self,
-        dataset: "PerturbationDataset",  # a reference to the PerturbationDataset
+        dataset: "PerturbationDataset",
         split: str,
         perturbed_indices: np.ndarray,
         control_indices: np.ndarray,
@@ -74,7 +77,7 @@ class BaseMappingStrategy(ABC):
         pass
 
     @abstractmethod
-    def get_control_index(self, dataset, split, perturbed_idx) -> Optional[int]:
+    def get_control_index(self, dataset, split, perturbed_idx) -> int | None:
         pass
 
     def get_mapped_expressions(

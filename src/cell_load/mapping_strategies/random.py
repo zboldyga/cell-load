@@ -1,6 +1,10 @@
 import random
+from typing import TYPE_CHECKING
 
 import numpy as np
+
+if TYPE_CHECKING:
+    from ..dataset import PerturbationDataset
 
 from .mapping_strategies import BaseMappingStrategy
 

@@ -1,17 +1,16 @@
 import logging
-from collections import defaultdict
 from pathlib import Path
-from typing import Dict, List, Literal, Optional, Set, Tuple
+from typing import Literal, Set
 
 import h5py
 import numpy as np
 import torch
 from lightning.pytorch import LightningDataModule
-from torch.utils.data import ConcatDataset, DataLoader, Dataset
+from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
 
 from ..config import ExperimentConfig
-from ..dataset.perturbation_dataset import PerturbationDataset
+from ..dataset import MetadataConcatDataset, PerturbationDataset
 from ..mapping_strategies import BatchMappingStrategy, RandomMappingStrategy
 from ..utils.data_utils import (
     GlobalH5MetadataCache,
@@ -21,32 +20,6 @@ from ..utils.data_utils import (
 from .samplers import PerturbationBatchSampler
 
 logger = logging.getLogger(__name__)
-
-
-class MetadataConcatDataset(ConcatDataset):
-    """
-    ConcatDataset that enforces consistent metadata across all constituent datasets.
-    """
-
-    def __init__(self, datasets: List[Dataset]):
-        super().__init__(datasets)
-        base = datasets[0].dataset
-        self.embed_key = base.embed_key
-        self.control_pert = base.control_pert
-        self.pert_col = base.pert_col
-        self.batch_col = base.batch_col
-
-        for ds in datasets:
-            md = ds.dataset
-            if (
-                md.embed_key != self.embed_key
-                or md.control_pert != self.control_pert
-                or md.pert_col != self.pert_col
-                or md.batch_col != self.batch_col
-            ):
-                raise ValueError(
-                    "All datasets must share the same embed_key, control_pert, pert_col, and batch_col"
-                )
 
 
 class PerturbationDataModule(LightningDataModule):
@@ -66,7 +39,7 @@ class PerturbationDataModule(LightningDataModule):
         batch_col: str = "gem_group",
         cell_type_key: str = "cell_type",
         control_pert: str = "non-targeting",
-        embed_key: Optional[Literal["X_hvg", "X_state"]] = None,
+        embed_key: Literal["X_hvg", "X_state"] | None = None,
         output_space: Literal["gene", "all"] = "gene",
         basal_mapping_strategy: Literal["batch", "random"] = "random",
         n_basal_samples: int = 1,
@@ -145,14 +118,14 @@ class PerturbationDataModule(LightningDataModule):
         )
 
         # Prepare dataset lists and maps
-        self.train_datasets: List[Dataset] = []
-        self.val_datasets: List[Dataset] = []
-        self.test_datasets: List[Dataset] = []
+        self.train_datasets: list[Dataset] = []
+        self.val_datasets: list[Dataset] = []
+        self.test_datasets: list[Dataset] = []
 
         self.all_perts: Set[str] = set()
-        self.pert_onehot_map: Optional[Dict[str, torch.Tensor]] = None
-        self.batch_onehot_map: Optional[Dict[str, torch.Tensor]] = None
-        self.cell_type_onehot_map: Optional[Dict[str, torch.Tensor]] = None
+        self.pert_onehot_map: dict[str, torch.Tensor] | None = None
+        self.batch_onehot_map: dict[str, torch.Tensor] | None = None
+        self.cell_type_onehot_map: dict[str, torch.Tensor] | None = None
 
         # Initialize global maps
         self._setup_global_maps()
@@ -167,7 +140,7 @@ class PerturbationDataModule(LightningDataModule):
         underlying_ds: PerturbationDataset = self.test_datasets[0].dataset
         return underlying_ds.get_gene_names(output_space=self.output_space)
 
-    def setup(self, stage: Optional[str] = None):
+    def setup(self, stage: str | None = None):
         """
         Set up training and test datasets.
         """
@@ -260,7 +233,6 @@ class PerturbationDataModule(LightningDataModule):
             input_dim = underlying_ds.n_genes
 
         gene_dim = underlying_ds.n_genes
-        # gene_dim = underlying_ds.get_num_hvgs()
         try:
             hvg_dim = underlying_ds.get_num_hvgs()
         except:
@@ -360,9 +332,9 @@ class PerturbationDataModule(LightningDataModule):
 
     def _create_dataloader(
         self,
-        datasets: List[Dataset],
+        datasets: list[Dataset],
         test: bool = False,
-        batch_size: Optional[int] = None,
+        batch_size: int | None = None,
     ):
         """Create a DataLoader with appropriate configuration."""
         use_int_counts = "int_counts" in self.__dict__ and self.int_counts
@@ -560,8 +532,8 @@ class PerturbationDataModule(LightningDataModule):
         pert_indices: np.ndarray,
         ctrl_indices: np.ndarray,
         cache,
-        pert_config: Dict[str, List[str]],
-    ) -> Dict[str, int]:
+        pert_config: dict[str, list[str]],
+    ) -> dict[str, int]:
         """Split a fewshot cell type according to perturbation assignments."""
         counts = {"train": 0, "val": 0, "test": 0}
 
@@ -631,8 +603,8 @@ class PerturbationDataModule(LightningDataModule):
 
         return counts
 
-    def _find_dataset_files(self, dataset_path: Path) -> Dict[str, Path]:
-        files: Dict[str, Path] = {}
+    def _find_dataset_files(self, dataset_path: Path) -> dict[str, Path]:
+        files: dict[str, Path] = {}
         for ext in ("*.h5", "*.h5ad"):
             for fpath in sorted(dataset_path.glob(ext)):
                 # fpath.stem will already be e.g. "CT0" for "CT0.h5ad" or "CT0.h5"
@@ -648,10 +620,10 @@ class PerturbationDataModule(LightningDataModule):
         pert_indices: np.ndarray,
         cache,
         dataset_name: str,
-        zeroshot_celltypes: Dict[str, str],
-        fewshot_celltypes: Dict[str, Dict[str, List[str]]],
+        zeroshot_celltypes: dict[str, str],
+        fewshot_celltypes: dict[str, dict[str, list[str]]],
         is_training_dataset: bool,
-    ) -> Dict[str, int]:
+    ) -> dict[str, int]:
         """Process a single cell type and return counts for each split."""
         counts = {"train": 0, "val": 0, "test": 0}
 
