@@ -7,6 +7,8 @@ from typing import Optional, Tuple
 import numpy as np
 import torch
 
+from ..dataset import PerturbationDataset
+
 logger = logging.getLogger(__name__)
 
 
@@ -53,7 +55,7 @@ class BaseMappingStrategy(ABC):
     @abstractmethod
     def register_split_indices(
         self,
-        dataset: "PerturbationDataset",  # a reference to the PerturbationDataset
+        dataset: PerturbationDataset,
         split: str,
         perturbed_indices: np.ndarray,
         control_indices: np.ndarray,
@@ -66,7 +68,7 @@ class BaseMappingStrategy(ABC):
 
     @abstractmethod
     def get_control_indices(
-        self, dataset: "PerturbationDataset", split: str, perturbed_idx: int
+        self, dataset: PerturbationDataset, split: str, perturbed_idx: int
     ) -> np.ndarray:
         """
         Returns the control indices for a given perturbed index in a particular split.
@@ -78,7 +80,7 @@ class BaseMappingStrategy(ABC):
         pass
 
     def get_mapped_expressions(
-        self, dataset: "PerturbationDataset", split: str, perturbed_idx: int
+        self, dataset: PerturbationDataset, split: str, perturbed_idx: int
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Base implementation where "perturbed_idx" confusingly refers to both control and perturbed cells.
