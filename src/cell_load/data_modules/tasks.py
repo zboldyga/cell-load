@@ -7,7 +7,7 @@ class TaskType(Enum):
     Different tasks at the dataset / cell type level.
 
     ZEROSHOT: if specified for a given dataset/cell_type, that cell type is only used in test
-    FEWSHOT: if specified for a given dataset/cell_type, that cell type is partially used in train / val and 
+    FEWSHOT: if specified for a given dataset/cell_type, that cell type is partially used in train / val and
              mostly used in test
     TRAINING: if specified for a given dataset/cell_type, that cell type is used in train / val and not in test
     """
