@@ -230,7 +230,7 @@ def suspected_discrete_torch(x: torch.Tensor, n_cells: int = 100) -> bool:
 def suspected_log_torch(x: torch.Tensor) -> bool:
     """Check if the data is log transformed already."""
     global_max = x.max()
-    return global_max.item() < 25.0
+    return global_max.item() < 15.0
 
 
 def _mean(expr) -> float:
