@@ -294,14 +294,24 @@ def is_on_target_knockdown(
     if not perturbed_cells.any():
         raise ValueError(f"No cells labelled with perturbation {target_gene!r}.")
 
-    control_mean = _mean(X[control_cells, gene_idx])
+    try:
+        control_mean = _mean(X[control_cells, gene_idx])
+    except:
+        control_cells = (adata.obs[perturbation_column] == control_label).values
+        control_mean = _mean(X[control_cells, gene_idx])
+
     if control_mean == 0:
         raise ValueError(
             f"Mean {target_gene!r} expression in control cells is zero; "
             "cannot compute knock-down ratio."
         )
 
-    perturbed_mean = _mean(X[perturbed_cells, gene_idx])
+    try:
+        perturbed_mean = _mean(X[perturbed_cells, gene_idx])
+    except:
+        perturbed_cells = (adata.obs[perturbation_column] == target_gene).values
+        perturbed_mean = _mean(X[perturbed_cells, gene_idx])
+
     knockdown_ratio = perturbed_mean / control_mean
     return knockdown_ratio < residual_expression
 
@@ -331,7 +341,7 @@ def filter_on_target_knockdown(
     adata_ = set_var_index_to_col(adata.copy(), col=var_gene_name)
     X = adata_.layers[layer] if layer is not None else adata_.X
     perts = adata_.obs[perturbation_column]
-    control_cells = perts == control_label
+    control_cells = (perts == control_label).values
 
     # ---------- stage 1: perturbation filter ----------
     perts_to_keep = [control_label]  # always keep controls
@@ -366,7 +376,12 @@ def filter_on_target_knockdown(
 
         # control mean for this gene
         if pert not in control_mean_cache:
-            ctrl_mean = _mean(X[control_cells, gene_idx])
+            try:
+                ctrl_mean = _mean(X[control_cells, gene_idx])
+            except:
+                print(control_cells.shape, control_cells)
+                print(gene_idx)
+                print(X[control_cells, gene_idx].shape)
             if ctrl_mean == 0:
                 raise ValueError(
                     f"Mean {pert!r} expression in control cells is zero; "
@@ -376,9 +391,12 @@ def filter_on_target_knockdown(
         else:
             ctrl_mean = control_mean_cache[pert]
 
-        pert_cells = perts == pert
+        pert_cells = (perts == pert).values
+        # FIX: Replace .A1 with .toarray().flatten() for scipy sparse matrices
         expr_vals = (
-            X[pert_cells, gene_idx].A1 if sp.issparse(X) else X[pert_cells, gene_idx]
+            X[pert_cells, gene_idx].toarray().flatten()
+            if sp.issparse(X)
+            else X[pert_cells, gene_idx]
         )
         ratios = expr_vals / ctrl_mean
         keep_mask[pert_cells] = ratios < cell_residual_expression
@@ -388,7 +406,7 @@ def filter_on_target_knockdown(
         if pert == control_label:
             continue
         # cells of this perturbation *still* kept after stages 1-2
-        pert_mask = (perts == pert) & keep_mask
+        pert_mask = (perts == pert).values & keep_mask
         if pert_mask.sum() < min_cells:
             keep_mask[pert_mask] = False  # drop them
 

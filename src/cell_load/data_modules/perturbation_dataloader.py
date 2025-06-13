@@ -404,8 +404,12 @@ class PerturbationDataModule(LightningDataModule):
             # Validate that every perturbation in all_perts is in the featurization dict.
             missing = all_perts - set(featurization_dict.keys())
             if len(missing) > 0:
-                raise ValueError(
-                    f"The following perturbations are missing from the featurization file: {missing}"
+                feature_dim = next(iter(featurization_dict.values())).shape[-1]
+                for pert in missing:
+                    featurization_dict[pert] = torch.zeros(feature_dim)
+
+                logger.info(
+                    "Set %d missing perturbations to zero vectors.", len(missing)
                 )
 
             logger.info(
