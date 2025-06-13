@@ -251,6 +251,8 @@ class PerturbationDataModule(LightningDataModule):
         pert_dim = next(iter(self.pert_onehot_map.values())).shape[0]
         batch_dim = next(iter(self.batch_onehot_map.values())).shape[0]
 
+        pert_names = list(self.pert_onehot_map.keys())
+
         return {
             "input_dim": input_dim,
             "gene_dim": gene_dim,
@@ -259,6 +261,7 @@ class PerturbationDataModule(LightningDataModule):
             "pert_dim": pert_dim,
             "gene_names": gene_names,
             "batch_dim": batch_dim,
+            "pert_names": pert_names,
         }
 
     def get_shared_perturbations(self) -> Set[str]:
