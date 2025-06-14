@@ -348,6 +348,11 @@ class PerturbationDataset(Dataset):
             ):
                 hvg_mask = self.h5_file["/var/highly_variable"][:]
                 raw = raw[hvg_mask]
+            elif output_space == "gene":
+                uns_key = "uns/hvg_names"
+                if uns_key in self.h5_file:
+                    hvg_names = self.h5_file[uns_key][:].astype(str)
+                    raw = hvg_names
             return [_decode(x) for x in raw]
         except KeyError:
             try:
