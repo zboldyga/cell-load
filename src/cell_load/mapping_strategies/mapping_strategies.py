@@ -101,9 +101,10 @@ class BaseMappingStrategy(ABC):
             control_index = self.get_control_index(dataset, split, perturbed_idx)
             pert_expr = dataset.fetch_obsm_expression(perturbed_idx, dataset.embed_key)
             if control_index is None:
-                raise ValueError(
-                    f"No control cells found for {dataset.get_cell_type(perturbed_idx)}"
-                )
+                ctrl_expr = torch.zeros_like(pert_expr)
+                # raise ValueError(
+                #     f"No control cells found for {dataset.get_cell_type(perturbed_idx)}"
+                # )
             else:
                 ctrl_expr = dataset.fetch_obsm_expression(
                     control_index, dataset.embed_key
