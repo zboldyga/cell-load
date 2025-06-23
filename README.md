@@ -7,15 +7,7 @@
 Distributed via [`uv`](https://docs.astral.sh/uv).
 
 ```bash
-# Clone repo
-git clone github.com:arcinstitute/cell-load
-cd cell-load
-
-# Initialize venv
-uv venv
-
-# Install
-uv pip install -e .
+uv pip install cell-load
 ```
 
 ## Data Module Usage
