@@ -100,7 +100,9 @@ data.kwargs.n_basal_samples=1
 data.kwargs.should_yield_control_cells=true
 ```
 
-### 3. Programmatic Usage
+These plug in as hydra configurable settings in the [STATE](https://github.com/ArcInstitute/state) repository.
+
+### 3. Standalone Programmatic Usage
 
 ```python
 from cell_load.data_modules import PerturbationDataModule
@@ -288,13 +290,7 @@ filtered_adata.write_h5ad("filtered_data.h5ad")
 
 ### Usage
 
-To enable cell barcode output, add the following to your command line:
-
-```bash
-data.kwargs.barcode=true
-```
-
-Or when creating the data module programmatically:
+When creating the data module programmatically:
 
 ```python
 from cell_load.data_modules import PerturbationDataModule
