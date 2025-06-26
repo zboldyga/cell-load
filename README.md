@@ -14,7 +14,7 @@ A PyTorch-based data loading library for single-cell perturbation data.
 ## Installation
 
 ```bash
-pip install cell-load
+uv pip install cell-load
 ```
 
 ## Quick Start
