@@ -19,3 +19,6 @@ replogle = "train"
 val = ["AARS"]
 test = ["AARS", "NUP107", "RPUSD4"]  # can overlap with val
 # train gets all other perturbations automatically
+
+# To enable cell barcode output, add data.kwargs.barcode=true to your command line:
+# data.kwargs.barcode=true

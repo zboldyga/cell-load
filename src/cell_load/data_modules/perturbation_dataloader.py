@@ -96,6 +96,7 @@ class PerturbationDataModule(LightningDataModule):
         self.int_counts = kwargs.get("int_counts", False)
         self.normalize_counts = kwargs.get("normalize_counts", False)
         self.store_raw_basal = kwargs.get("store_raw_basal", False)
+        self.barcode = kwargs.get("barcode", False)
 
         logger.info(
             f"Initializing DataModule: batch_size={batch_size}, workers={num_workers}, "
@@ -183,6 +184,7 @@ class PerturbationDataModule(LightningDataModule):
             "int_counts": self.int_counts,
             "normalize_counts": self.normalize_counts,
             "store_raw_basal": self.store_raw_basal,
+            "barcode": self.barcode,
         }
 
         torch.save(save_dict, filepath)
@@ -221,6 +223,7 @@ class PerturbationDataModule(LightningDataModule):
             "int_counts": save_dict.pop("int_counts", False),
             "normalize_counts": save_dict.pop("normalize_counts", False),
             "store_raw_basal": save_dict.pop("store_raw_basal", False),
+            "barcode": save_dict.pop("barcode", True),
         }
 
         # Create new instance with all the saved parameters
@@ -454,6 +457,7 @@ class PerturbationDataModule(LightningDataModule):
             store_raw_expression=self.store_raw_expression,
             output_space=self.output_space,
             store_raw_basal=self.store_raw_basal,
+            barcode=self.barcode,
         )
 
     def _setup_datasets(self):
