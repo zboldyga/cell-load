@@ -617,7 +617,7 @@ class PerturbationDataset(Dataset):
     def _load_cell_barcodes(self) -> np.ndarray:
         """
         Load cell barcodes from obs/_index in the H5 file.
-        
+
         Returns:
             np.ndarray: Array of cell barcode strings
         """
@@ -643,8 +643,15 @@ class PerturbationDataset(Dataset):
                         decoded_categories.append(cat.decode("utf-8", errors="ignore"))
                     else:
                         decoded_categories.append(str(cat))
-                return np.array([decoded_categories[i] for i in barcode_codes], dtype=str)
+                return np.array(
+                    [decoded_categories[i] for i in barcode_codes], dtype=str
+                )
             except KeyError:
                 # If no barcode information is available, generate generic ones
-                logger.warning(f"No cell barcode information found in {self.h5_path}. Generating generic barcodes.")
-                return np.array([f"cell_{i:06d}" for i in range(self.metadata_cache.n_cells)], dtype=str)
+                logger.warning(
+                    f"No cell barcode information found in {self.h5_path}. Generating generic barcodes."
+                )
+                return np.array(
+                    [f"cell_{i:06d}" for i in range(self.metadata_cache.n_cells)],
+                    dtype=str,
+                )

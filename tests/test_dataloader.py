@@ -785,12 +785,18 @@ def test_barcode_functionality(synthetic_data):
         # Check that barcodes are present
         assert "pert_cell_barcode" in batch, "pert_cell_barcode not found in batch"
         assert "ctrl_cell_barcode" in batch, "ctrl_cell_barcode not found in batch"
-        
+
         # Check that barcodes are lists of strings
-        assert isinstance(batch["pert_cell_barcode"], list), "pert_cell_barcode should be a list"
-        assert isinstance(batch["ctrl_cell_barcode"], list), "ctrl_cell_barcode should be a list"
-        assert len(batch["pert_cell_barcode"]) == len(batch["ctrl_cell_barcode"]), "barcode lists should have same length"
-        
+        assert isinstance(batch["pert_cell_barcode"], list), (
+            "pert_cell_barcode should be a list"
+        )
+        assert isinstance(batch["ctrl_cell_barcode"], list), (
+            "ctrl_cell_barcode should be a list"
+        )
+        assert len(batch["pert_cell_barcode"]) == len(batch["ctrl_cell_barcode"]), (
+            "barcode lists should have same length"
+        )
+
         # Check that barcodes are strings
         for barcode in batch["pert_cell_barcode"]:
             assert isinstance(barcode, str), "barcodes should be strings"
@@ -811,8 +817,12 @@ def test_barcode_functionality(synthetic_data):
         batch_no_barcode = next(iter(train_loader_no_barcode))
 
         # Check that barcodes are not present
-        assert "pert_cell_barcode" not in batch_no_barcode, "pert_cell_barcode should not be present when barcode=False"
-        assert "ctrl_cell_barcode" not in batch_no_barcode, "ctrl_cell_barcode should not be present when barcode=False"
+        assert "pert_cell_barcode" not in batch_no_barcode, (
+            "pert_cell_barcode should not be present when barcode=False"
+        )
+        assert "ctrl_cell_barcode" not in batch_no_barcode, (
+            "ctrl_cell_barcode should not be present when barcode=False"
+        )
 
     finally:
         toml_path.unlink()  # Clean up temp file
