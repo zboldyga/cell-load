@@ -39,6 +39,7 @@ class PerturbationDataset(Dataset):
         random_state: int = 42,
         should_yield_control_cells: bool = True,
         store_raw_basal: bool = False,
+        barcode: bool = False,
         **kwargs,
     ):
         """
@@ -59,6 +60,7 @@ class PerturbationDataset(Dataset):
             random_state: Seed for reproducibility
             should_yield_control_cells: Include control cells in output
             store_raw_basal: If True, include raw basal expression
+            barcode: If True, include cell barcodes in output
             **kwargs: Additional options (e.g. output_space)
         """
         super().__init__()
@@ -77,6 +79,7 @@ class PerturbationDataset(Dataset):
         self.store_raw_expression = store_raw_expression
         self.should_yield_control_cells = should_yield_control_cells
         self.store_raw_basal = store_raw_basal
+        self.barcode = barcode
         self.output_space = kwargs.get("output_space", "gene")
 
         # Load metadata cache and open file
@@ -84,6 +87,12 @@ class PerturbationDataset(Dataset):
             str(self.h5_path), pert_col, cell_type_key, control_pert, batch_col
         )
         self.h5_file = h5py.File(self.h5_path, "r")
+
+        # Load cell barcodes if requested
+        if self.barcode:
+            self.cell_barcodes = self._load_cell_barcodes()
+        else:
+            self.cell_barcodes = None
 
         # Cached categories & masks
         self.pert_categories = self.metadata_cache.pert_categories
@@ -133,7 +142,7 @@ class PerturbationDataset(Dataset):
 
         This returns a dictionary with:
         - pert_cell_emb: the embedding of the perturbed cell (either in gene space or embedding space)
-        - ctrl_cell_emb: the control cell’s embedding. control cells are chosen by the mapping strategy
+        - ctrl_cell_emb: the control cell's embedding. control cells are chosen by the mapping strategy
         - pert_emb: the one-hot encoding (or other featurization) for the perturbation
         - pert_name: the perturbation name
         - cell_type: the cell type
@@ -202,6 +211,11 @@ class PerturbationDataset(Dataset):
                 )
             elif self.output_space == "all":
                 sample["ctrl_cell_counts"] = self.fetch_gene_expression(ctrl_idx)
+
+        # Optionally include cell barcodes
+        if self.barcode and self.cell_barcodes is not None:
+            sample["pert_cell_barcode"] = self.cell_barcodes[file_idx]
+            sample["ctrl_cell_barcode"] = self.cell_barcodes[ctrl_idx]
 
         return sample
 
@@ -401,6 +415,7 @@ class PerturbationDataset(Dataset):
         # Check if optional fields exist
         has_pert_cell_counts = "pert_cell_counts" in batch[0]
         has_ctrl_cell_counts = "ctrl_cell_counts" in batch[0]
+        has_barcodes = "pert_cell_barcode" in batch[0]
 
         # Preallocate optional lists if needed
         if has_pert_cell_counts:
@@ -408,6 +423,10 @@ class PerturbationDataset(Dataset):
 
         if has_ctrl_cell_counts:
             ctrl_cell_counts_list = [None] * batch_size
+
+        if has_barcodes:
+            pert_cell_barcode_list = [None] * batch_size
+            ctrl_cell_barcode_list = [None] * batch_size
 
         # Process all items in a single pass
         for i, item in enumerate(batch):
@@ -425,6 +444,10 @@ class PerturbationDataset(Dataset):
 
             if has_ctrl_cell_counts:
                 ctrl_cell_counts_list[i] = item["ctrl_cell_counts"]
+
+            if has_barcodes:
+                pert_cell_barcode_list[i] = item["pert_cell_barcode"]
+                ctrl_cell_barcode_list[i] = item["ctrl_cell_barcode"]
 
         # Create batch dictionary
         batch_dict = {
@@ -479,6 +502,10 @@ class PerturbationDataset(Dataset):
             #         batch_dict["ctrl_cell_counts"] = ctrl_cell_counts
             #     else:
             #         batch_dict["ctrl_cell_counts"] = torch.log1p(ctrl_cell_counts)
+
+        if has_barcodes:
+            batch_dict["pert_cell_barcode"] = pert_cell_barcode_list
+            batch_dict["ctrl_cell_barcode"] = ctrl_cell_barcode_list
 
         return batch_dict
 
@@ -586,3 +613,45 @@ class PerturbationDataset(Dataset):
             self.control_pert,
             self.batch_col,
         )
+
+    def _load_cell_barcodes(self) -> np.ndarray:
+        """
+        Load cell barcodes from obs/_index in the H5 file.
+
+        Returns:
+            np.ndarray: Array of cell barcode strings
+        """
+        try:
+            # Try to load from obs/_index (AnnData's default storage for obs index)
+            barcodes = self.h5_file["obs/_index"][:]
+            # Decode bytes to strings if necessary
+            decoded_barcodes = []
+            for barcode in barcodes:
+                if isinstance(barcode, (bytes, bytearray)):
+                    decoded_barcodes.append(barcode.decode("utf-8", errors="ignore"))
+                else:
+                    decoded_barcodes.append(str(barcode))
+            return np.array(decoded_barcodes, dtype=str)
+        except KeyError:
+            # If obs/_index doesn't exist, try obs/_index/categories and codes
+            try:
+                barcode_categories = self.h5_file["obs/_index/categories"][:]
+                barcode_codes = self.h5_file["obs/_index/codes"][:]
+                decoded_categories = []
+                for cat in barcode_categories:
+                    if isinstance(cat, (bytes, bytearray)):
+                        decoded_categories.append(cat.decode("utf-8", errors="ignore"))
+                    else:
+                        decoded_categories.append(str(cat))
+                return np.array(
+                    [decoded_categories[i] for i in barcode_codes], dtype=str
+                )
+            except KeyError:
+                # If no barcode information is available, generate generic ones
+                logger.warning(
+                    f"No cell barcode information found in {self.h5_path}. Generating generic barcodes."
+                )
+                return np.array(
+                    [f"cell_{i:06d}" for i in range(self.metadata_cache.n_cells)],
+                    dtype=str,
+                )
