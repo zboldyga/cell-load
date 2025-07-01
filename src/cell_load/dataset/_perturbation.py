@@ -560,7 +560,10 @@ class PerturbationDataset(Dataset):
 
     def get_num_hvgs(self) -> int:
         """Return the number of highly variable genes in the obsm matrix."""
-        return self.h5_file["obsm/X_hvg"].shape[1]
+        try:
+            return self.h5_file["obsm/X_hvg"].shape[1]
+        except:
+            return 0
 
     def _get_num_cells(self) -> int:
         """Return the total number of cells in the file."""
