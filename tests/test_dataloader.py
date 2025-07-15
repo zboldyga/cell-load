@@ -754,3 +754,75 @@ def test_complex_fewshot_scenario(synthetic_data):
 
     finally:
         toml_path.unlink()
+
+
+def test_barcode_functionality(synthetic_data):
+    """Test that cell barcodes are included when barcode=True."""
+    root, cell_types = synthetic_data
+
+    config = {
+        "datasets": {"dataset1": "placeholder"},
+        "training": {"dataset1": "train"},
+    }
+
+    toml_path = create_toml_config(root, config)
+
+    try:
+        # Test with barcode=True
+        dm = make_datamodule(
+            toml_path,
+            embed_key="X_hvg",
+            batch_size=16,
+            control_pert="P0",
+            barcode=True,
+        )
+        dm.setup()
+
+        # Get a batch from the dataloader
+        train_loader = dm.train_dataloader()
+        batch = next(iter(train_loader))
+
+        # Check that barcodes are present
+        assert "pert_cell_barcode" in batch, "pert_cell_barcode not found in batch"
+        assert "ctrl_cell_barcode" in batch, "ctrl_cell_barcode not found in batch"
+
+        # Check that barcodes are lists of strings
+        assert isinstance(batch["pert_cell_barcode"], list), (
+            "pert_cell_barcode should be a list"
+        )
+        assert isinstance(batch["ctrl_cell_barcode"], list), (
+            "ctrl_cell_barcode should be a list"
+        )
+        assert len(batch["pert_cell_barcode"]) == len(batch["ctrl_cell_barcode"]), (
+            "barcode lists should have same length"
+        )
+
+        # Check that barcodes are strings
+        for barcode in batch["pert_cell_barcode"]:
+            assert isinstance(barcode, str), "barcodes should be strings"
+        for barcode in batch["ctrl_cell_barcode"]:
+            assert isinstance(barcode, str), "barcodes should be strings"
+
+        # Test with barcode=False (default)
+        dm_no_barcode = make_datamodule(
+            toml_path,
+            embed_key="X_hvg",
+            batch_size=16,
+            control_pert="P0",
+        )
+        dm_no_barcode.setup()
+
+        # Get a batch from the dataloader
+        train_loader_no_barcode = dm_no_barcode.train_dataloader()
+        batch_no_barcode = next(iter(train_loader_no_barcode))
+
+        # Check that barcodes are not present
+        assert "pert_cell_barcode" not in batch_no_barcode, (
+            "pert_cell_barcode should not be present when barcode=False"
+        )
+        assert "ctrl_cell_barcode" not in batch_no_barcode, (
+            "ctrl_cell_barcode should not be present when barcode=False"
+        )
+
+    finally:
+        toml_path.unlink()  # Clean up temp file

@@ -84,6 +84,7 @@ class ExperimentConfig:
 
         # Check that dataset paths exist
         for dataset, path in self.datasets.items():
+            print(path)
             if not Path(path).exists():
                 logger.warning(f"Dataset path does not exist: {path}")
 

@@ -1,7 +1,10 @@
 import logging
+import glob
+import re
+
 from functools import partial
 from pathlib import Path
-from typing import Literal, Set
+from typing import Literal, Set, Dict
 
 import h5py
 import numpy as np
@@ -96,6 +99,7 @@ class PerturbationDataModule(LightningDataModule):
         self.int_counts = kwargs.get("int_counts", False)
         self.normalize_counts = kwargs.get("normalize_counts", False)
         self.store_raw_basal = kwargs.get("store_raw_basal", False)
+        self.barcode = kwargs.get("barcode", False)
 
         logger.info(
             f"Initializing DataModule: batch_size={batch_size}, workers={num_workers}, "
@@ -183,6 +187,7 @@ class PerturbationDataModule(LightningDataModule):
             "int_counts": self.int_counts,
             "normalize_counts": self.normalize_counts,
             "store_raw_basal": self.store_raw_basal,
+            "barcode": self.barcode,
         }
 
         torch.save(save_dict, filepath)
@@ -221,6 +226,7 @@ class PerturbationDataModule(LightningDataModule):
             "int_counts": save_dict.pop("int_counts", False),
             "normalize_counts": save_dict.pop("normalize_counts", False),
             "store_raw_basal": save_dict.pop("store_raw_basal", False),
+            "barcode": save_dict.pop("barcode", True),
         }
 
         # Create new instance with all the saved parameters
@@ -454,6 +460,7 @@ class PerturbationDataModule(LightningDataModule):
             store_raw_expression=self.store_raw_expression,
             output_space=self.output_space,
             store_raw_basal=self.store_raw_basal,
+            barcode=self.barcode,
         )
 
     def _setup_datasets(self):
@@ -610,12 +617,75 @@ class PerturbationDataModule(LightningDataModule):
         return counts
 
     def _find_dataset_files(self, dataset_path: Path) -> dict[str, Path]:
-        files: dict[str, Path] = {}
-        for ext in ("*.h5", "*.h5ad"):
-            for fpath in sorted(dataset_path.glob(ext)):
-                # fpath.stem will already be e.g. "CT0" for "CT0.h5ad" or "CT0.h5"
-                files[fpath.stem] = fpath
+        files: Dict[str, Path] = {}
+        path_str = str(dataset_path)
+
+        # Check if path contains glob patterns
+        if any(char in path_str for char in "*?[]{}"):
+            # Handle brace expansion manually since Python glob doesn't support it
+            expanded_patterns = self._expand_braces(path_str)
+
+            for pattern in expanded_patterns:
+                if pattern.startswith("/"):
+                    # Absolute path - use glob.glob()
+                    if pattern.endswith((".h5", ".h5ad")):
+                        # Pattern already specifies file extension
+                        for fpath_str in sorted(glob.glob(pattern)):
+                            fpath = Path(fpath_str)
+                            files[fpath.stem] = fpath
+                    else:
+                        # Pattern doesn't specify extension, add file patterns
+                        for ext in ("*.h5", "*.h5ad"):
+                            full_pattern = f"{pattern.rstrip('/')}/{ext}"
+                            for fpath_str in sorted(glob.glob(full_pattern)):
+                                fpath = Path(fpath_str)
+                                files[fpath.stem] = fpath
+                else:
+                    # Relative path - use Path.glob()
+                    if pattern.endswith((".h5", ".h5ad")):
+                        for fpath in sorted(Path().glob(pattern)):
+                            files[fpath.stem] = fpath
+                    else:
+                        for ext in ("*.h5", "*.h5ad"):
+                            full_pattern = f"{pattern.rstrip('/')}/{ext}"
+                            for fpath in sorted(Path().glob(full_pattern)):
+                                files[fpath.stem] = fpath
+        else:
+            # No glob patterns - treat as regular path
+            if dataset_path.is_file():
+                # Single file
+                files[dataset_path.stem] = dataset_path
+            else:
+                # Directory - search for files
+                for ext in ("*.h5", "*.h5ad"):
+                    for fpath in sorted(dataset_path.glob(ext)):
+                        files[fpath.stem] = fpath
+
         return files
+
+    def _expand_braces(self, pattern: str) -> list[str]:
+        """Expand brace patterns like {a,b,c} into multiple patterns."""
+
+        def expand_single_brace(text: str) -> list[str]:
+            # Find the first brace group
+            match = re.search(r"\{([^}]+)\}", text)
+            if not match:
+                return [text]
+
+            # Extract the options and expand them
+            before = text[: match.start()]
+            after = text[match.end() :]
+            options = match.group(1).split(",")
+
+            results = []
+            for option in options:
+                new_text = before + option.strip() + after
+                # Recursively expand any remaining braces
+                results.extend(expand_single_brace(new_text))
+
+            return results
+
+        return expand_single_brace(pattern)
 
     def _process_celltype(
         self,
