@@ -295,7 +295,7 @@ class PerturbationDataset(Dataset):
                 self.h5_file["/X/indices"][start_ptr:end_ptr], dtype=torch.long
             )
             counts = torch.sparse_csr_tensor(
-                torch.tensor([0], dtype=torch.long),
+                torch.tensor([0], dtype=torch.float32),
                 sub_indices,
                 sub_data,
                 (1, self.n_genes),
@@ -303,7 +303,7 @@ class PerturbationDataset(Dataset):
             data = counts.to_dense().squeeze()
         else:
             row_data = self.h5_file["/X"][idx]
-            data = torch.tensor(row_data)
+            data = torch.tensor(row_data, dtype=torch.float32)
         return data
 
     def fetch_obsm_expression(self, idx: int, key: str) -> torch.Tensor:
