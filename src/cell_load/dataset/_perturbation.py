@@ -309,7 +309,7 @@ class PerturbationDataset(Dataset):
                 self.h5_file["/X/indices"][start_ptr:end_ptr], dtype=torch.long
             )
             counts = torch.sparse_csr_tensor(
-                torch.tensor([0], dtype=torch.float32),
+                torch.tensor([0], dtype=torch.long),
                 sub_indices,
                 sub_data,
                 (1, self.n_genes),
