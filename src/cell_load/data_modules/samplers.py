@@ -30,6 +30,8 @@ class PerturbationBatchSampler(Sampler):
         cell_sentence_len: int = 512,
         test: bool = False,
         use_batch: bool = False,
+        seed: int = 0,
+        epoch: int = 0,
     ):
         logger.info(
             "Creating perturbation batch sampler with metadata caching (using codes)..."
@@ -43,6 +45,8 @@ class PerturbationBatchSampler(Sampler):
         self.batch_size = batch_size
         self.test = test
         self.use_batch = use_batch
+        self.seed = seed
+        self.epoch = epoch
 
         if self.test and self.batch_size != 1:
             logger.warning(
@@ -99,6 +103,13 @@ class PerturbationBatchSampler(Sampler):
         Combines existing batches into meta-batches of size batch_size * cell_sentence_len,
         sampling with replacement if needed to reach cell_sentence_len.
         """
+
+        if self.distributed:
+            rank_sentences = self._get_rank_sentences()
+
+        else:
+            rank_sentences = self.sentences
+
         all_batches = []
         current_batch = []
 
@@ -135,6 +146,39 @@ class PerturbationBatchSampler(Sampler):
             all_batches.append(current_batch)
 
         return all_batches
+
+    def _get_rank_sentences(self) -> list[list[int]]:
+        """
+        Get the subset of sentences that this rank should process.
+        Sentences are shuffled using epoch-based seed, then distributed across ranks.
+        """
+        # Shuffle sentences using epoch-based seed for consistent ordering across ranks
+        shuffled_sentences = self.sentences.copy()
+        np.random.RandomState(self.seed + self.epoch).shuffle(shuffled_sentences)
+        
+        # Calculate sentence distribution across processes
+        total_sentences = len(shuffled_sentences)
+        base_sentences = total_sentences // self.num_replicas
+        remainder = total_sentences % self.num_replicas
+        
+        # Calculate number of sentences for this specific rank
+        if self.rank < remainder:
+            num_sentences_for_rank = base_sentences + 1
+        else:
+            num_sentences_for_rank = base_sentences
+            
+        # Calculate starting sentence index for this rank
+        start_sentence_idx = self.rank * base_sentences + min(self.rank, remainder)
+        end_sentence_idx = start_sentence_idx + num_sentences_for_rank
+        
+        rank_sentences = shuffled_sentences[start_sentence_idx:end_sentence_idx]
+        
+        logger.info(
+            f"Rank {self.rank}: Processing {len(rank_sentences)} sentences "
+            f"(indices {start_sentence_idx} to {end_sentence_idx-1} of {total_sentences})"
+        )
+        
+        return rank_sentences
 
     def _process_subset(self, global_offset: int, subset: Subset) -> list[list[int]]:
         """
