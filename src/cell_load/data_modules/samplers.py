@@ -115,7 +115,7 @@ class PerturbationBatchSampler(Sampler):
 
         num_full = 0
         num_partial = 0
-        for sentence in self.sentences:
+        for sentence in rank_sentences:
             # If batch is smaller than cell_sentence_len, sample with replacement
             if len(sentence) < self.cell_sentence_len and not self.test:
                 # during inference, don't sample by replacement
@@ -137,9 +137,15 @@ class PerturbationBatchSampler(Sampler):
                 if current_batch:  # Add the completed meta-batch
                     all_batches.append(current_batch)
                 current_batch = sentence
-        logger.info(
-            f"Of all batches, {num_full} were full and {num_partial} were partial."
-        )
+        
+        if self.distributed:
+            logger.info(
+                f"Rank {self.rank}: Of {len(rank_sentences)} sentences, {num_full} were full and {num_partial} were partial."
+            )
+        else:
+            logger.info(
+                f"Of all batches, {num_full} were full and {num_partial} were partial."
+            )
 
         # Add the last meta-batch if it exists
         if current_batch:
