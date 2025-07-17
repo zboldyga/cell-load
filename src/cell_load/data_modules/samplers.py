@@ -267,3 +267,17 @@ class PerturbationBatchSampler(Sampler):
 
     def __len__(self) -> int:
         return len(self.batches)
+
+    def set_epoch(self, epoch: int) -> None:
+        """
+        Set the epoch for this sampler.
+        
+        This ensures all replicas use a different random ordering for each epoch.
+        
+        Args:
+            epoch: Epoch number
+        """
+        self.epoch = epoch
+        
+        # Recreate batches for new epoch (sentences remain the same)
+        self.batches = self._create_batches()
