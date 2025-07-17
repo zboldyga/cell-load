@@ -4,6 +4,7 @@ from typing import Iterator
 
 import numpy as np
 from torch.utils.data import Sampler, Subset
+import torch.distributed as dist
 
 from ..dataset import MetadataConcatDataset, PerturbationDataset
 from ..utils.data_utils import H5MetadataCache
@@ -51,6 +52,19 @@ class PerturbationBatchSampler(Sampler):
 
         self.cell_sentence_len = cell_sentence_len
         self.drop_last = drop_last
+
+        # Setup distributed settings if distributed mode is enabled.
+        self.distributed = False
+        self.num_replicas = 1
+        self.rank = 0
+
+        if dist.is_available() and dist.is_initialized():
+            self.distributed = True
+            self.num_replicas = dist.get_world_size()
+            self.rank = dist.get_rank()
+            logger.info(
+                f"Distributed mode enabled. World size: {self.num_replicas}, rank: {self.rank}."
+            )
 
         # Create caches for all unique H5 files.
         self.metadata_caches = {}
