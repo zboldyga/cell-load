@@ -1,6 +1,7 @@
 import logging
 import time
 from typing import Iterator
+import copy
 
 import numpy as np
 from torch.utils.data import Sampler, Subset
@@ -119,24 +120,23 @@ class PerturbationBatchSampler(Sampler):
             # If batch is smaller than cell_sentence_len, sample with replacement
             if len(sentence) < self.cell_sentence_len and not self.test:
                 # during inference, don't sample by replacement
-                sentence = list(
-                    np.random.choice(
+                new_sentence = np.random.choice(
                         sentence, size=self.cell_sentence_len, replace=True
-                    )
-                )
+                    ).tolist()
                 num_partial += 1
             else:
-                assert len(sentence) == self.cell_sentence_len or self.test
+                new_sentence = copy.deepcopy(sentence)
+                assert len(new_sentence) == self.cell_sentence_len or self.test
                 num_full += 1
 
-            sentence_len = len(sentence) if self.test else self.cell_sentence_len
+            sentence_len = len(new_sentence) if self.test else self.cell_sentence_len
 
-            if len(current_batch) + len(sentence) <= self.batch_size * sentence_len:
-                current_batch.extend(sentence)
+            if len(current_batch) + len(new_sentence) <= self.batch_size * sentence_len:
+                current_batch.extend(new_sentence)
             else:
                 if current_batch:  # Add the completed meta-batch
                     all_batches.append(current_batch)
-                current_batch = sentence
+                current_batch = new_sentence
         
         if self.distributed:
             logger.info(
