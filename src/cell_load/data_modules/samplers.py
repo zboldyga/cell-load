@@ -21,6 +21,8 @@ class PerturbationBatchSampler(Sampler):
     Instead of grouping by cell type and perturbation names, this sampler
     groups based on integer codes stored in the H5 file (e.g. `cell_type_codes`
     and `pert_codes` in the H5MetadataCache). This avoids repeated string operations.
+
+    Supports distributed training.
     """
 
     def __init__(
@@ -103,6 +105,8 @@ class PerturbationBatchSampler(Sampler):
         """
         Combines existing batches into meta-batches of size batch_size * cell_sentence_len,
         sampling with replacement if needed to reach cell_sentence_len.
+
+        IF distributed, each rank will process a subset of the sentences.
         """
 
         if self.distributed:
