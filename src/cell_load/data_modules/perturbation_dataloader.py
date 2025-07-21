@@ -49,6 +49,7 @@ class PerturbationDataModule(LightningDataModule):
         n_basal_samples: int = 1,
         should_yield_control_cells: bool = True,
         cell_sentence_len: int = 512,
+        drop_last: bool = False,
         **kwargs,  # missing perturbation_features_file  and store_raw_basal for backwards compatibility
     ):
         """
@@ -66,6 +67,7 @@ class PerturbationDataModule(LightningDataModule):
             output_space: The output space for model predictions (gene or latent, which uses embed_key)
             basal_mapping_strategy: One of {"batch","random","nearest","ot"}
             n_basal_samples: Number of control cells to sample per perturbed cell
+            drop_last: Whether to drop the last sentence set if it is smaller than cell_sentence_len
         """
         super().__init__()
 
@@ -79,6 +81,7 @@ class PerturbationDataModule(LightningDataModule):
         self.num_workers = num_workers
         self.random_seed = random_seed
         self.rng = np.random.default_rng(random_seed)
+        self.drop_last = drop_last
 
         # H5 field names
         self.pert_col = pert_col
@@ -358,7 +361,7 @@ class PerturbationDataModule(LightningDataModule):
         sampler = PerturbationBatchSampler(
             dataset=ds,
             batch_size=batch_size,
-            drop_last=False,
+            drop_last=self.drop_last,
             cell_sentence_len=self.cell_sentence_len,
             test=test,
             use_batch=use_batch,
