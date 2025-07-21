@@ -125,8 +125,8 @@ class PerturbationBatchSampler(Sampler):
             if len(sentence) < self.cell_sentence_len and not self.test:
                 # during inference, don't sample by replacement
                 new_sentence = np.random.choice(
-                        sentence, size=self.cell_sentence_len, replace=True
-                    ).tolist()
+                    sentence, size=self.cell_sentence_len, replace=True
+                ).tolist()
                 num_partial += 1
             else:
                 new_sentence = copy.deepcopy(sentence)
@@ -141,7 +141,7 @@ class PerturbationBatchSampler(Sampler):
                 if current_batch:  # Add the completed meta-batch
                     all_batches.append(current_batch)
                 current_batch = new_sentence
-        
+
         if self.distributed:
             logger.info(
                 f"Rank {self.rank}: Of {len(rank_sentences)} sentences, {num_full} were full and {num_partial} were partial."
@@ -165,29 +165,29 @@ class PerturbationBatchSampler(Sampler):
         # Shuffle sentences using epoch-based seed for consistent ordering across ranks
         shuffled_sentences = self.sentences.copy()
         np.random.RandomState(self.seed + self.epoch).shuffle(shuffled_sentences)
-        
+
         # Calculate sentence distribution across processes
         total_sentences = len(shuffled_sentences)
         base_sentences = total_sentences // self.num_replicas
         remainder = total_sentences % self.num_replicas
-        
+
         # Calculate number of sentences for this specific rank
         if self.rank < remainder:
             num_sentences_for_rank = base_sentences + 1
         else:
             num_sentences_for_rank = base_sentences
-            
+
         # Calculate starting sentence index for this rank
         start_sentence_idx = self.rank * base_sentences + min(self.rank, remainder)
         end_sentence_idx = start_sentence_idx + num_sentences_for_rank
-        
+
         rank_sentences = shuffled_sentences[start_sentence_idx:end_sentence_idx]
-        
+
         logger.info(
             f"Rank {self.rank}: Processing {len(rank_sentences)} sentences "
-            f"(indices {start_sentence_idx} to {end_sentence_idx-1} of {total_sentences})"
+            f"(indices {start_sentence_idx} to {end_sentence_idx - 1} of {total_sentences})"
         )
-        
+
         return rank_sentences
 
     def _process_subset(self, global_offset: int, subset: Subset) -> list[list[int]]:
@@ -275,13 +275,13 @@ class PerturbationBatchSampler(Sampler):
     def set_epoch(self, epoch: int) -> None:
         """
         Set the epoch for this sampler.
-        
+
         This ensures all replicas use a different random ordering for each epoch.
-        
+
         Args:
             epoch: Epoch number
         """
         self.epoch = epoch
-        
+
         # Recreate batches for new epoch (sentences remain the same)
         self.batches = self._create_batches()
