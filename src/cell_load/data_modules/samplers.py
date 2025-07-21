@@ -282,6 +282,3 @@ class PerturbationBatchSampler(Sampler):
             epoch: Epoch number
         """
         self.epoch = epoch
-
-        # Recreate batches for new epoch (sentences remain the same)
-        self.batches = self._create_batches()
