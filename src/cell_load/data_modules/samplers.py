@@ -267,7 +267,7 @@ class PerturbationBatchSampler(Sampler):
     def __iter__(self) -> Iterator[list[int]]:
         # Shuffle the order of batches each time we iterate in non-distributed mode.
         if not self.distributed:
-            self._create_batches()
+            self.batches = self._create_batches()
         yield from self.batches
 
     def __len__(self) -> int:
@@ -283,7 +283,4 @@ class PerturbationBatchSampler(Sampler):
             epoch: Epoch number
         """
         self.epoch = epoch
-        
-        # Only shuffle in distributed mode.
-        if self.distributed:
-            self._create_batches()
+        self.batches = self._create_batches()
