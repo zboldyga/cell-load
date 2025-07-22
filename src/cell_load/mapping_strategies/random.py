@@ -89,6 +89,12 @@ class RandomMappingStrategy(BaseMappingStrategy):
         Returns n_basal_samples control indices that are from the same cell type as the perturbed cell.
         Uses Python's random.choice instead of NumPy's random.choice for better performance.
         """
+
+        # Check if the perturbed idx is in fact a control idx
+        if dataset.metadata_cache.control_mask[perturbed_idx]:
+
+            # Control cells map to themselves
+            return np.array([perturbed_idx] * self.n_basal_samples)
         
         control_idxs = self.split_control_mapping[split][perturbed_idx]
 
@@ -104,6 +110,13 @@ class RandomMappingStrategy(BaseMappingStrategy):
         Returns a single control index from the same cell type as the perturbed cell.
         Uses Python's random.choice instead of NumPy's random.choice for potentially better performance.
         """
+
+        # Check if the perturbed idx is in fact a control idx
+        if dataset.metadata_cache.control_mask[perturbed_idx]:
+
+            # Control cells map to themselves
+            return perturbed_idx
+
         control_idxs = self.split_control_mapping[split][perturbed_idx]
 
         if len(control_idxs) == 0:
