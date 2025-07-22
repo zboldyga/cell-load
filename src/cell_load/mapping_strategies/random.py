@@ -27,6 +27,14 @@ class RandomMappingStrategy(BaseMappingStrategy):
             "test": {},
         }
 
+        # Fixed mapping from perturbed_idx -> list of control indices.
+        self.split_control_mapping: dict[str, dict[int, list[int]]] = {
+            "train": {},
+            "train_eval": {},
+            "val": {},
+            "test": {},
+        }
+
         # Initialize Python's random module with the same seed
         random.seed(random_state)
 
@@ -58,6 +66,20 @@ class RandomMappingStrategy(BaseMappingStrategy):
                 self.split_control_pool[split][ct] = list(ct_indices)
             else:
                 self.split_control_pool[split][ct].extend(ct_indices)
+
+        # Create a fixed mapping from perturbed_idx -> list of control indices
+        for pert_idx in perturbed_indices:
+            pert_cell_type = dataset.get_cell_type(pert_idx)
+            pool = self.split_control_pool[split].get(pert_cell_type, None)
+            if pool:
+                # Sample n_basal_samples control indices from the pool for this perturbed cell
+                control_idxs: list[int] = random.choices(pool, k=self.n_basal_samples)
+
+                self.split_control_mapping[split][pert_idx] = control_idxs
+                
+            else:
+                # No control cells available for this cell type
+                self.split_control_mapping[split][pert_idx] = []
 
     # #
     def get_control_indices(
