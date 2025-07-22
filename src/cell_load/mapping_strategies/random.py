@@ -14,10 +14,17 @@ class RandomMappingStrategy(BaseMappingStrategy):
     Maps a perturbed cell to random control cell(s) drawn from the same plate.
     We ensure that only control cells with the same cell type
     as the perturbed cell are considered.
+    
+    Args:
+        cache_perturbation_control_pairs (bool): If True, cache perturbation-control pairs 
+            at the start of training and reuse them. If False, sample new control cells 
+            for each perturbed cell every time (original behavior). Default is False.
     """
 
-    def __init__(self, name="random", random_state=42, n_basal_samples=1, **kwargs):
+    def __init__(self, name="random", random_state=42, n_basal_samples=1, cache_perturbation_control_pairs=False, **kwargs):
         super().__init__(name, random_state, n_basal_samples, **kwargs)
+        
+        self.cache_perturbation_control_pairs = cache_perturbation_control_pairs
 
         # Map cell type -> list of control indices.
         self.split_control_pool = {
@@ -28,6 +35,7 @@ class RandomMappingStrategy(BaseMappingStrategy):
         }
 
         # Fixed mapping from perturbed_idx -> list of control indices.
+        # Only used when cache_perturbation_control_pairs=True
         self.split_control_mapping: dict[str, dict[int, list[int]]] = {
             "train": {},
             "train_eval": {},
@@ -52,6 +60,9 @@ class RandomMappingStrategy(BaseMappingStrategy):
         For the given split, group all control indices by their cell type.
         We assume that if a filter is provided in the dataset then all indices belong to the same cell type;
         but if no filter was applied, then this grouping is necessary.
+        
+        If cache_perturbation_control_pairs is True, also create a fixed mapping from 
+        perturbed_idx -> list of control indices.
         """
 
         # Get cell types for all control indices
@@ -68,58 +79,80 @@ class RandomMappingStrategy(BaseMappingStrategy):
                 self.split_control_pool[split][ct].extend(ct_indices)
 
         # Create a fixed mapping from perturbed_idx -> list of control indices
-        for pert_idx in perturbed_indices:
-            pert_cell_type = dataset.get_cell_type(pert_idx)
-            pool = self.split_control_pool[split].get(pert_cell_type, None)
-            if pool:
-                # Sample n_basal_samples control indices from the pool for this perturbed cell
-                control_idxs: list[int] = random.choices(pool, k=self.n_basal_samples)
+        # Only if caching is enabled
+        if self.cache_perturbation_control_pairs:
+            for pert_idx in perturbed_indices:
+                pert_cell_type = dataset.get_cell_type(pert_idx)
+                pool = self.split_control_pool[split].get(pert_cell_type, None)
+                if pool:
+                    # Sample n_basal_samples control indices from the pool for this perturbed cell
+                    control_idxs: list[int] = random.choices(pool, k=self.n_basal_samples)
 
-                self.split_control_mapping[split][pert_idx] = control_idxs
-                
-            else:
-                # No control cells available for this cell type
-                self.split_control_mapping[split][pert_idx] = []
+                    self.split_control_mapping[split][pert_idx] = control_idxs
+                    
+                else:
+                    # No control cells available for this cell type
+                    self.split_control_mapping[split][pert_idx] = []
 
-    # #
     def get_control_indices(
         self, dataset: "PerturbationDataset", split: str, perturbed_idx: int
     ) -> np.ndarray:
         """
         Returns n_basal_samples control indices that are from the same cell type as the perturbed cell.
-        Uses Python's random.choice instead of NumPy's random.choice for better performance.
+        
+        If cache_perturbation_control_pairs is True, uses the pre-computed mapping.
+        If False, samples new control cells each time (original behavior).
         """
 
         # Check if the perturbed idx is in fact a control idx
-        if dataset.metadata_cache.control_mask[perturbed_idx]:
-
+        if dataset.metadata_cache.control_mask[perturbed_idx] and self.cache_perturbation_control_pairs:
             # Control cells map to themselves
             return np.array([perturbed_idx] * self.n_basal_samples)
         
-        control_idxs = self.split_control_mapping[split][perturbed_idx]
-
-        if len(control_idxs) == 0:
-            return None
-
-        return np.array(control_idxs)
+        if self.cache_perturbation_control_pairs:
+            # Use cached mapping
+            control_idxs = self.split_control_mapping[split][perturbed_idx]
+            if len(control_idxs) == 0:
+                raise ValueError(
+                    f"No control cells found in RandomMappingStrategy for cell type '{dataset.get_cell_type(perturbed_idx)}'"
+                )
+            return np.array(control_idxs)
+        else:
+            # Sample new control cells each time (original behavior)
+            pert_cell_type = dataset.get_cell_type(perturbed_idx)
+            pool = self.split_control_pool[split].get(pert_cell_type, None)
+            if not pool:
+                raise ValueError(
+                    f"No control cells found in RandomMappingStrategy for cell type '{pert_cell_type}'"
+                )
+            control_idxs = random.choices(pool, k=self.n_basal_samples)
+            return np.array(control_idxs)
 
     def get_control_index(
         self, dataset: "PerturbationDataset", split: str, perturbed_idx: int
     ):
         """
         Returns a single control index from the same cell type as the perturbed cell.
-        Uses Python's random.choice instead of NumPy's random.choice for potentially better performance.
+        
+        If cache_perturbation_control_pairs is True, uses the pre-computed mapping.
+        If False, samples a new control cell each time (original behavior).
         """
 
         # Check if the perturbed idx is in fact a control idx
-        if dataset.metadata_cache.control_mask[perturbed_idx]:
-
+        if dataset.metadata_cache.control_mask[perturbed_idx] and self.cache_perturbation_control_pairs:
             # Control cells map to themselves
             return perturbed_idx
 
-        control_idxs = self.split_control_mapping[split][perturbed_idx]
-
-        if len(control_idxs) == 0:
-            return None
-
-        return control_idxs[0]
+        if self.cache_perturbation_control_pairs:
+            # Use cached mapping
+            control_idxs = self.split_control_mapping[split][perturbed_idx]
+            if len(control_idxs) == 0:
+                return None
+            return control_idxs[0]
+        else:
+            # Sample new control cell each time (original behavior)
+            pert_cell_type = dataset.get_cell_type(perturbed_idx)
+            pool = self.split_control_pool[split].get(pert_cell_type, None)
+            if not pool:
+                return None
+            return random.choice(pool)
