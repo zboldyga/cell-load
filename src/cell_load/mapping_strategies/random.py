@@ -104,13 +104,9 @@ class RandomMappingStrategy(BaseMappingStrategy):
         Returns a single control index from the same cell type as the perturbed cell.
         Uses Python's random.choice instead of NumPy's random.choice for potentially better performance.
         """
-        # Get the cell type of the perturbed cell
-        pert_cell_type = dataset.get_cell_type(perturbed_idx)
-        pool = self.split_control_pool[split].get(pert_cell_type, None)
+        control_idxs = self.split_control_mapping[split][perturbed_idx]
 
-        # Return None if there is no pool or the pool is empty
-        if not pool:
+        if len(control_idxs) == 0:
             return None
 
-        # Use Python's random.choice to select a single item
-        return random.choice(pool)
+        return control_idxs[0]
