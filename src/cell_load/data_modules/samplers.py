@@ -265,8 +265,9 @@ class PerturbationBatchSampler(Sampler):
         return all_batches
 
     def __iter__(self) -> Iterator[list[int]]:
-        # Shuffle the order of batches each time we iterate.
-        np.random.shuffle(self.batches)
+        # Shuffle the order of batches each time we iterate in non-distributed mode.
+        if not self.distributed:
+            self.batches = self._create_batches()
         yield from self.batches
 
     def __len__(self) -> int:
@@ -282,6 +283,5 @@ class PerturbationBatchSampler(Sampler):
             epoch: Epoch number
         """
         self.epoch = epoch
-
         # Recreate batches for new epoch (sentences remain the same)
         self.batches = self._create_batches()

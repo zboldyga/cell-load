@@ -57,11 +57,11 @@ def distributed_worker(rank, world_size, test_data, results_list):
             "sampler_rank": sampler.rank,
             "total_batches": len(sampler),
             "total_sentences": len(sampler.sentences),
-            "batch_data": sampler.batches,
+            "batch_data": sampler.batches.copy(),
         }
 
         sampler.set_epoch(1)
-        results["ep1_batch_data"] = sampler.batches
+        results["ep1_batch_data"] = sampler.batches.copy()
 
         # Put results in queue
         results_list.append(results)
@@ -200,12 +200,12 @@ class TestDistributedPerturbationBatchSampler:
         for result in results:
             assert "error" not in result, f"Process failed: {result.get('error')}"
 
-        # Check that epoch 1 batches are different from epoch 0
+        # Check that epoch 1 batches are different from epoch 0 for every process
         for result in results:
             ep0_batch = result["batch_data"][0]
             ep1_batch = result["ep1_batch_data"][0]
             assert np.array_equal(ep0_batch, ep1_batch) == False, (
-                "Processes generated the same first batch"
+                f"Epoch 1 batches are the same as epoch 0 for process {result['rank']}"
             )
 
 
