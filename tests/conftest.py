@@ -1,12 +1,12 @@
-
 import pytest
 import tempfile
 import numpy as np
 import pandas as pd
 import anndata as ad
 from pathlib import Path
-import toml 
+import toml
 from cell_load.utils.modules import get_datamodule
+
 
 @pytest.fixture(scope="session")
 def synthetic_data(tmp_path_factory):
@@ -61,6 +61,7 @@ def synthetic_data(tmp_path_factory):
             adata.write(fpath)
 
     return root, cell_types
+
 
 def create_toml_config(root: Path, config_dict: dict) -> Path:
     """Create a temporary TOML configuration file."""
