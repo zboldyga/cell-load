@@ -44,7 +44,7 @@ class RandomMappingStrategy(BaseMappingStrategy):
         }
 
         # Initialize Python's random module with the same seed
-        random.seed(random_state)
+        self.rng = random.Random(random_state)
 
     def name():
         return "random"
@@ -106,12 +106,7 @@ class RandomMappingStrategy(BaseMappingStrategy):
 
                 # Shuffle control pool for random assignment
                 shuffled_pool = pool.copy()
-                random.shuffle(shuffled_pool)
-
-                # If pert cell is control, then remove it from the pool
-                for pert_idx in pert_idxs_list:
-                    if dataset.metadata_cache.control_mask[pert_idx]:
-                        pool.remove(pert_idx)
+                self.rng.shuffle(shuffled_pool)
 
                 # Calculate total assignments needed for this cell type / perturbation
                 total_assignments_needed = len(pert_idxs_list) * self.n_basal_samples
@@ -137,11 +132,6 @@ class RandomMappingStrategy(BaseMappingStrategy):
         If cache_perturbation_control_pairs is True, uses the pre-computed mapping.
         If False, samples new control cells each time (original behavior).
         """
-
-        # Check if the perturbed idx is in fact a control idx
-        if dataset.metadata_cache.control_mask[perturbed_idx] and self.cache_perturbation_control_pairs:
-            # Control cells map to themselves
-            return np.array([perturbed_idx] * self.n_basal_samples)
         
         if self.cache_perturbation_control_pairs:
             # Use cached mapping
@@ -159,7 +149,7 @@ class RandomMappingStrategy(BaseMappingStrategy):
                 raise ValueError(
                     f"No control cells found in RandomMappingStrategy for cell type '{pert_cell_type}'"
                 )
-            control_idxs = random.choices(pool, k=self.n_basal_samples)
+            control_idxs = self.rng.choices(pool, k=self.n_basal_samples)
             return np.array(control_idxs)
 
     def get_control_index(
@@ -171,11 +161,6 @@ class RandomMappingStrategy(BaseMappingStrategy):
         If cache_perturbation_control_pairs is True, uses the pre-computed mapping.
         If False, samples a new control cell each time (original behavior).
         """
-
-        # Check if the perturbed idx is in fact a control idx
-        if dataset.metadata_cache.control_mask[perturbed_idx] and self.cache_perturbation_control_pairs:
-            # Control cells map to themselves
-            return perturbed_idx
 
         if self.cache_perturbation_control_pairs:
             # Use cached mapping
@@ -189,4 +174,4 @@ class RandomMappingStrategy(BaseMappingStrategy):
             pool = self.split_control_pool[split].get(pert_cell_type, None)
             if not pool:
                 return None
-            return random.choice(pool)
+            return self.rng.choice(pool)
