@@ -84,7 +84,7 @@ class RandomMappingStrategy(BaseMappingStrategy):
             pert_groups = {}
 
             # Group perturbed indices by cell type and perturbation name
-            for pert_idx in perturbed_indices:
+            for pert_idx in np.concatenate([perturbed_indices,control_indices]):
                 pert_cell_type = dataset.get_cell_type(pert_idx)
                 pert_name = dataset.get_perturbation_name(pert_idx)
                 key = (pert_cell_type, pert_name)
@@ -107,6 +107,11 @@ class RandomMappingStrategy(BaseMappingStrategy):
                 # Shuffle control pool for random assignment
                 shuffled_pool = pool.copy()
                 random.shuffle(shuffled_pool)
+
+                # If pert cell is control, then remove it from the pool
+                for pert_idx in pert_idxs_list:
+                    if dataset.metadata_cache.control_mask[pert_idx]:
+                        pool.remove(pert_idx)
 
                 # Calculate total assignments needed for this cell type / perturbation
                 total_assignments_needed = len(pert_idxs_list) * self.n_basal_samples
