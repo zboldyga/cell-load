@@ -65,6 +65,7 @@ class RandomMappingStrategy(BaseMappingStrategy):
         perturbed_idx -> list of control indices.
         """
 
+        all_indices = np.concatenate([perturbed_indices, control_indices])
         # Get cell types for all control indices
         cell_types = dataset.get_all_cell_types(control_indices)
 
@@ -84,7 +85,7 @@ class RandomMappingStrategy(BaseMappingStrategy):
             pert_groups = {}
 
             # Group perturbed indices by cell type and perturbation name
-            for pert_idx in np.concatenate([perturbed_indices,control_indices]):
+            for pert_idx in all_indices:
                 pert_cell_type = dataset.get_cell_type(pert_idx)
                 pert_name = dataset.get_perturbation_name(pert_idx)
                 key = (pert_cell_type, pert_name)
