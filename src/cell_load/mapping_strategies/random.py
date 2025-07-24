@@ -81,18 +81,47 @@ class RandomMappingStrategy(BaseMappingStrategy):
         # Create a fixed mapping from perturbed_idx -> list of control indices
         # Only if caching is enabled
         if self.cache_perturbation_control_pairs:
+            pert_groups = {}
+
+            # Group perturbed indices by cell type and perturbation name
             for pert_idx in perturbed_indices:
                 pert_cell_type = dataset.get_cell_type(pert_idx)
-                pool = self.split_control_pool[split].get(pert_cell_type, None)
-                if pool:
-                    # Sample n_basal_samples control indices from the pool for this perturbed cell
-                    control_idxs: list[int] = random.choices(pool, k=self.n_basal_samples)
+                pert_name = dataset.get_perturbation_name(pert_idx)
+                key = (pert_cell_type, pert_name)
 
-                    self.split_control_mapping[split][pert_idx] = control_idxs
-                    
-                else:
+                if key not in pert_groups:
+                    pert_groups[key] = []
+
+                pert_groups[key].append(pert_idx)
+
+            # For each cell type / perturbation, assign control cells to each perturbed cell
+            for (cell_type, pert_name), pert_idxs_list in pert_groups.items():
+                pool = self.split_control_pool[split].get(cell_type, None)
+                
+                if not pool:
                     # No control cells available for this cell type
-                    self.split_control_mapping[split][pert_idx] = []
+                    for pert_idx in pert_idxs_list:
+                        self.split_control_mapping[split][pert_idx] = []
+                    continue
+
+                # Shuffle control pool for random assignment
+                shuffled_pool = pool.copy()
+                random.shuffle(shuffled_pool)
+
+                # Calculate total assignments needed for this cell type / perturbation
+                total_assignments_needed = len(pert_idxs_list) * self.n_basal_samples
+
+                # Ensure we have enough controls for all assignments
+                assert len(shuffled_pool) >= total_assignments_needed, f"Need {total_assignments_needed} controls for {cell_type} / {pert_name} but only have {len(shuffled_pool)}"
+
+                # Assign control cells without replacement to this cell type / perturbation
+                control_assignments = shuffled_pool[:total_assignments_needed]
+
+                # Assign control cells to each perturbed cell
+                for i, pert_idx in enumerate(pert_idxs_list):
+                    start_idx = i * self.n_basal_samples
+                    end_idx = start_idx + self.n_basal_samples
+                    self.split_control_mapping[split][pert_idx] = control_assignments[start_idx:end_idx]
 
     def get_control_indices(
         self, dataset: "PerturbationDataset", split: str, perturbed_idx: int
