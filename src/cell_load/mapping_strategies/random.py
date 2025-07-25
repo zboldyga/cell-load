@@ -18,21 +18,32 @@ class RandomMappingStrategy(BaseMappingStrategy):
     Maps a perturbed cell to random control cell(s) drawn from the same plate.
     We ensure that only control cells with the same cell type
     as the perturbed cell are considered.
-    
+
     Args:
-        cache_perturbation_control_pairs (bool): If True, cache perturbation-control pairs 
-            at the start of training and reuse them. If False, sample new control cells 
+        cache_perturbation_control_pairs (bool): If True, cache perturbation-control pairs
+            at the start of training and reuse them. If False, sample new control cells
             for each perturbed cell every time (original behavior). Default is False.
     """
 
-    def __init__(self, name="random", random_state=42, n_basal_samples=1, cache_perturbation_control_pairs=False, **kwargs):
+    def __init__(
+        self,
+        name="random",
+        random_state=42,
+        n_basal_samples=1,
+        cache_perturbation_control_pairs=False,
+        **kwargs,
+    ):
         super().__init__(name, random_state, n_basal_samples, **kwargs)
-        
+
         self.cache_perturbation_control_pairs = cache_perturbation_control_pairs
-        
+
         if self.cache_perturbation_control_pairs:
-            logger.info(f"RandomMappingStrategy initialized with cache_perturbation_control_pairs=True (random_state={random_state}, n_basal_samples={n_basal_samples})")
-            logger.info(f"Warning: If using n_basal_samples > 1, use the original behavior by setting cache_perturbation_control_pairs=False")
+            logger.info(
+                f"RandomMappingStrategy initialized with cache_perturbation_control_pairs=True (random_state={random_state}, n_basal_samples={n_basal_samples})"
+            )
+            logger.info(
+                f"Warning: If using n_basal_samples > 1, use the original behavior by setting cache_perturbation_control_pairs=False"
+            )
 
         # Map cell type -> list of control indices.
         self.split_control_pool = {
@@ -68,8 +79,8 @@ class RandomMappingStrategy(BaseMappingStrategy):
         For the given split, group all control indices by their cell type.
         We assume that if a filter is provided in the dataset then all indices belong to the same cell type;
         but if no filter was applied, then this grouping is necessary.
-        
-        If cache_perturbation_control_pairs is True, also create a fixed mapping from 
+
+        If cache_perturbation_control_pairs is True, also create a fixed mapping from
         perturbed_idx -> list of control indices.
         """
 
@@ -88,7 +99,9 @@ class RandomMappingStrategy(BaseMappingStrategy):
                 self.split_control_pool[split][ct].extend(ct_indices)
 
         if self.cache_perturbation_control_pairs:
-            logger.info(f"Creating cached perturbation-control mapping for split '{split}' with {len(perturbed_indices)} perturbed cells and {len(control_indices)} control cells")
+            logger.info(
+                f"Creating cached perturbation-control mapping for split '{split}' with {len(perturbed_indices)} perturbed cells and {len(control_indices)} control cells"
+            )
 
         # Create a fixed mapping from perturbed_idx -> list of control indices
         # Only if caching is enabled
@@ -109,7 +122,7 @@ class RandomMappingStrategy(BaseMappingStrategy):
             # For each cell type / perturbation, assign control cells to each perturbed cell
             for (cell_type, pert_name), pert_idxs_list in pert_groups.items():
                 pool = self.split_control_pool[split].get(cell_type, None)
-                
+
                 if not pool:
                     # No control cells available for this cell type
                     for pert_idx in pert_idxs_list:
@@ -124,7 +137,9 @@ class RandomMappingStrategy(BaseMappingStrategy):
                 total_assignments_needed = len(pert_idxs_list) * self.n_basal_samples
 
                 # Ensure we have enough controls for all assignments
-                assert len(shuffled_pool) >= total_assignments_needed, f"Need {total_assignments_needed} controls for {cell_type} / {pert_name} but only have {len(shuffled_pool)}"
+                assert len(shuffled_pool) >= total_assignments_needed, (
+                    f"Need {total_assignments_needed} controls for {cell_type} / {pert_name} but only have {len(shuffled_pool)}"
+                )
 
                 # Assign control cells without replacement to this cell type / perturbation
                 control_assignments = shuffled_pool[:total_assignments_needed]
@@ -133,20 +148,24 @@ class RandomMappingStrategy(BaseMappingStrategy):
                 for i, pert_idx in enumerate(pert_idxs_list):
                     start_idx = i * self.n_basal_samples
                     end_idx = start_idx + self.n_basal_samples
-                    self.split_control_mapping[split][pert_idx] = control_assignments[start_idx:end_idx]
+                    self.split_control_mapping[split][pert_idx] = control_assignments[
+                        start_idx:end_idx
+                    ]
 
-            logger.info(f"Split '{split}' - Successfully created cached mapping for {len(self.split_control_mapping[split])} perturbed cells")
+            logger.info(
+                f"Split '{split}' - Successfully created cached mapping for {len(self.split_control_mapping[split])} perturbed cells"
+            )
 
     def get_control_indices(
         self, dataset: "PerturbationDataset", split: str, perturbed_idx: int
     ) -> np.ndarray:
         """
         Returns n_basal_samples control indices that are from the same cell type as the perturbed cell.
-        
+
         If cache_perturbation_control_pairs is True, uses the pre-computed mapping.
         If False, samples new control cells each time (original behavior).
         """
-        
+
         if self.cache_perturbation_control_pairs:
             # Use cached mapping
             control_idxs = self.split_control_mapping[split][perturbed_idx]
@@ -171,7 +190,7 @@ class RandomMappingStrategy(BaseMappingStrategy):
     ):
         """
         Returns a single control index from the same cell type as the perturbed cell.
-        
+
         If cache_perturbation_control_pairs is True, uses the pre-computed mapping.
         If False, samples a new control cell each time (original behavior).
         """
