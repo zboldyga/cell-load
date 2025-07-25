@@ -11,6 +11,26 @@ from conftest import create_toml_config, make_datamodule
 class TestRandomMappingStrategy:
     """Test class for RandomMappingStrategy functionality."""
 
+    @pytest.fixture(scope="function")
+    def mapping_strategy_cached(self):
+        """Create a mapping strategy with caching enabled."""
+        return RandomMappingStrategy(
+            name="test_random_cached",
+            random_state=42,
+            n_basal_samples=1,
+            cache_perturbation_control_pairs=True,
+        )
+
+    @pytest.fixture(scope="function")
+    def mapping_strategy_uncached(self):
+        """Create a mapping strategy with caching disabled."""
+        return RandomMappingStrategy(
+            name="test_random_uncached",
+            random_state=42,
+            n_basal_samples=1,
+            cache_perturbation_control_pairs=False,
+        )
+
     @pytest.fixture(scope="class")
     def dataset_with_strategy(self, synthetic_data):
         """Create a dataset with mapping strategy for testing."""
@@ -130,18 +150,11 @@ class TestRandomMappingStrategy:
         assert strategy.n_basal_samples == 3
         assert strategy.cache_perturbation_control_pairs == True
 
-    def test_mapping_creation_at_start_cached(self, indices_data):
+    def test_mapping_creation_at_start_cached(self, mapping_strategy_cached, indices_data):
         """Check to see if the mapping is created at the start when caching is enabled."""
         dataset = indices_data["dataset"]
         control_indices = indices_data["control_indices"]
         perturbed_indices = indices_data["perturbed_indices"]
-
-        mapping_strategy_cached = RandomMappingStrategy(
-            name="test_random_cached",
-            random_state=42,
-            n_basal_samples=1,
-            cache_perturbation_control_pairs=True,
-        )
 
         # Before registration, mapping should be empty
         assert len(mapping_strategy_cached.split_control_mapping["train"]) == 0
@@ -182,18 +195,11 @@ class TestRandomMappingStrategy:
                 if batch_idx >= 2:
                     break
 
-    def test_one_to_one_mapping_cached(self, indices_data):
+    def test_one_to_one_mapping_cached(self, mapping_strategy_cached, indices_data):
         """Make sure a control cell is mapping to only one perturb cell for a given perturbation."""
         dataset = indices_data["dataset"]
         control_indices = indices_data["control_indices"]
         perturbed_indices = indices_data["perturbed_indices"]
-
-        mapping_strategy_cached = RandomMappingStrategy(
-            name="test_random_cached",
-            random_state=42,
-            n_basal_samples=1,
-            cache_perturbation_control_pairs=True,
-        )
 
         mapping_strategy_cached.register_split_indices(
             dataset, "train", perturbed_indices, control_indices
@@ -223,7 +229,7 @@ class TestRandomMappingStrategy:
                 )
                 cell_type_to_pert_to_control_set[cell_type][pert_name].add(control_idx)
 
-    def test_split_control_mapping_keys_contain_both_cell_types(self, indices_data):
+    def test_split_control_mapping_keys_contain_both_cell_types(self, mapping_strategy_cached, indices_data):
         """Make sure split_control_mapping keys contain both perturb and control cells."""
         dataset = indices_data["dataset"]
         control_indices = indices_data["control_indices"]
@@ -231,13 +237,6 @@ class TestRandomMappingStrategy:
 
         control_indices_set = set(control_indices)
         perturbed_indices_set = set(perturbed_indices)
-
-        mapping_strategy_cached = RandomMappingStrategy(
-            name="test_random_cached",
-            random_state=42,
-            n_basal_samples=1,
-            cache_perturbation_control_pairs=True,
-        )
 
         # Register split indices
         mapping_strategy_cached.register_split_indices(
@@ -282,18 +281,11 @@ class TestRandomMappingStrategy:
             != strategy2.split_control_mapping["train"]
         )
 
-    def test_get_control_index_consistency_cached(self, indices_data):
+    def test_get_control_index_consistency_cached(self, mapping_strategy_cached, indices_data):
         """Check that get_control_index always returns the same value once the class has been initialized."""
         dataset = indices_data["dataset"]
         control_indices = indices_data["control_indices"]
         perturbed_indices = indices_data["perturbed_indices"]
-
-        mapping_strategy_cached = RandomMappingStrategy(
-            name="test_random_cached",
-            random_state=42,
-            n_basal_samples=1,
-            cache_perturbation_control_pairs=True,
-        )
 
         # Register split indices
         mapping_strategy_cached.register_split_indices(
@@ -311,18 +303,11 @@ class TestRandomMappingStrategy:
         assert isinstance(int(result1), int)
         assert result1 in control_indices
 
-    def test_get_control_indices_consistency_cached(self, indices_data):
+    def test_get_control_indices_consistency_cached(self, mapping_strategy_cached, indices_data):
         """Test that get_control_indices always returns the same values when caching is enabled."""
         dataset = indices_data["dataset"]
         control_indices = indices_data["control_indices"]
         perturbed_indices = indices_data["perturbed_indices"]
-
-        mapping_strategy_cached = RandomMappingStrategy(
-            name="test_random_cached",
-            random_state=42,
-            n_basal_samples=1,
-            cache_perturbation_control_pairs=True,
-        )
 
         # Register split indices
         mapping_strategy_cached.register_split_indices(
@@ -345,18 +330,11 @@ class TestRandomMappingStrategy:
         assert np.array_equal(result2, result3)
         assert len(result1) == mapping_strategy_cached.n_basal_samples
 
-    def test_backwards_compatibility_uncached(self, indices_data):
+    def test_backwards_compatibility_uncached(self, mapping_strategy_uncached, indices_data):
         """Test backwards compatibility when cache_perturbation_control_pairs == False."""
         dataset = indices_data["dataset"]
         control_indices = indices_data["control_indices"]
         perturbed_indices = indices_data["perturbed_indices"]
-
-        mapping_strategy_uncached = RandomMappingStrategy(
-            name="test_random_uncached",
-            random_state=42,
-            n_basal_samples=1,
-            cache_perturbation_control_pairs=False,
-        )
 
         # Register split indices
         mapping_strategy_uncached.register_split_indices(
@@ -388,7 +366,7 @@ class TestRandomMappingStrategy:
         # Check that all results are not the same
         assert len(set(results)) > 1
 
-    def test_multiple_splits_independence(self, indices_data):
+    def test_multiple_splits_independence(self, mapping_strategy_cached, indices_data):
         """Test that different splits maintain independent mappings."""
         dataset = indices_data["dataset"]
         control_indices = indices_data["control_indices"]
@@ -398,13 +376,6 @@ class TestRandomMappingStrategy:
         mid_point = len(perturbed_indices) // 2
         train_pert_indices = perturbed_indices[:mid_point]
         val_pert_indices = perturbed_indices[mid_point:]
-
-        mapping_strategy_cached = RandomMappingStrategy(
-            name="test_random_cached",
-            random_state=42,
-            n_basal_samples=1,
-            cache_perturbation_control_pairs=True,
-        )
 
         # Register split indices for different splits
         mapping_strategy_cached.register_split_indices(
@@ -455,25 +426,11 @@ class TestRandomMappingStrategy:
             == strategy2.split_control_mapping["train"]
         )
 
-    def test_cache_parameter_effectiveness(self, indices_data):
+    def test_cache_parameter_effectiveness(self, mapping_strategy_cached, mapping_strategy_uncached, indices_data):
         """Test that cache_perturbation_control_pairs parameter works correctly."""
         dataset = indices_data["dataset"]
         control_indices = indices_data["control_indices"]
         perturbed_indices = indices_data["perturbed_indices"]
-
-        mapping_strategy_cached = RandomMappingStrategy(
-            name="test_random_cached",
-            random_state=42,
-            n_basal_samples=1,
-            cache_perturbation_control_pairs=True,
-        )
-
-        mapping_strategy_uncached = RandomMappingStrategy(
-            name="test_random_uncached",
-            random_state=42,
-            n_basal_samples=1,
-            cache_perturbation_control_pairs=False,
-        )
 
         # Register split indices for both strategies
         mapping_strategy_cached.register_split_indices(
