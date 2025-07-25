@@ -1,4 +1,5 @@
 import random
+import logging
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -7,6 +8,9 @@ if TYPE_CHECKING:
     from ..dataset import PerturbationDataset
 
 from .mapping_strategies import BaseMappingStrategy
+
+# Set up logger
+logger = logging.getLogger(__name__)
 
 
 class RandomMappingStrategy(BaseMappingStrategy):
@@ -25,6 +29,10 @@ class RandomMappingStrategy(BaseMappingStrategy):
         super().__init__(name, random_state, n_basal_samples, **kwargs)
         
         self.cache_perturbation_control_pairs = cache_perturbation_control_pairs
+        
+        if self.cache_perturbation_control_pairs:
+            logger.info(f"RandomMappingStrategy initialized with cache_perturbation_control_pairs=True (random_state={random_state}, n_basal_samples={n_basal_samples})")
+            logger.info(f"Warning: If using n_basal_samples > 1, use the original behavior by setting cache_perturbation_control_pairs=False")
 
         # Map cell type -> list of control indices.
         self.split_control_pool = {
@@ -79,6 +87,9 @@ class RandomMappingStrategy(BaseMappingStrategy):
             else:
                 self.split_control_pool[split][ct].extend(ct_indices)
 
+        if self.cache_perturbation_control_pairs:
+            logger.info(f"Creating cached perturbation-control mapping for split '{split}' with {len(perturbed_indices)} perturbed cells and {len(control_indices)} control cells")
+
         # Create a fixed mapping from perturbed_idx -> list of control indices
         # Only if caching is enabled
         if self.cache_perturbation_control_pairs:
@@ -123,6 +134,8 @@ class RandomMappingStrategy(BaseMappingStrategy):
                     start_idx = i * self.n_basal_samples
                     end_idx = start_idx + self.n_basal_samples
                     self.split_control_mapping[split][pert_idx] = control_assignments[start_idx:end_idx]
+
+            logger.info(f"Split '{split}' - Successfully created cached mapping for {len(self.split_control_mapping[split])} perturbed cells")
 
     def get_control_indices(
         self, dataset: "PerturbationDataset", split: str, perturbed_idx: int
