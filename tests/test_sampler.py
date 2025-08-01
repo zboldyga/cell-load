@@ -211,7 +211,7 @@ class TestDistributedPerturbationBatchSampler:
     def test_last_batch_not_same_every_epoch(self, distributed_test_results):
         """Test that last batch is not the same every epoch"""
         results = distributed_test_results
-        
+
         # Check for errors
         for result in results:
             assert "error" not in result, f"Process failed: {result.get('error')}"
