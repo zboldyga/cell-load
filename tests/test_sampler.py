@@ -3,9 +3,7 @@ import os
 import traceback
 
 import numpy as np
-import pandas as pd
 import pytest
-import torch
 import torch.distributed as dist
 
 from cell_load.data_modules.samplers import PerturbationBatchSampler
