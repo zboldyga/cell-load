@@ -161,7 +161,11 @@ def main():
         
         print(f"Filtered to {filtered_adata.n_obs} cells and {filtered_adata.n_vars} genes")
 
-     # Apply preprocessing if requested
+    except Exception as e:
+        print(f"Error applying filter: {e}", file=sys.stderr)
+        sys.exit(1)
+    
+    # Apply preprocessing if requested
     if args.preprocess:
         try:
             adata = preprocess_state_paper(adata)
@@ -169,11 +173,7 @@ def main():
             print(f"Error during preprocessing: {e}", file=sys.stderr)
             sys.exit(1)
         
-    except Exception as e:
-        print(f"Error applying filter: {e}", file=sys.stderr)
-        sys.exit(1)
-    
-    # Save output
+        # Save output
     try:
         output_path = Path(args.output)
         output_path.parent.mkdir(parents=True, exist_ok=True)
