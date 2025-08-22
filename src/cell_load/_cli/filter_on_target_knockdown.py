@@ -183,6 +183,16 @@ def main():
         output_path = Path(args.output)
         output_path.parent.mkdir(parents=True, exist_ok=True)
         
+        # Fix potential DataFrame index conflicts before saving
+        if filtered_adata.var.index.name in filtered_adata.var.columns:
+            # Check if the values are actually different
+            index_values = filtered_adata.var.index.values
+            column_values = filtered_adata.var[filtered_adata.var.index.name].values
+            if not all(index_values == column_values):
+                # Rename the index to avoid conflict
+                print(f"  - Fixing var index name conflict: {filtered_adata.var.index.name} -> {filtered_adata.var.index.name}_index")
+                filtered_adata.var.index.name = f"{filtered_adata.var.index.name}_index"
+        
         print(f"Saving filtered data to {args.output}...")
         filtered_adata.write_h5ad(args.output)
         print("Done!")
