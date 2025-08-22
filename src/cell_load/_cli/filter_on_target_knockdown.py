@@ -15,8 +15,6 @@ def preprocess_state_paper(adata_pp: anndata.AnnData) -> anndata.AnnData:
     Apply preprocessing as described in the state paper:
     1. Normalize to 10k read depth
     2. Log transform
-    3. Compute highly varying genes (top 2000)  
-    4. Set X_hvg obsm key with highly variable gene expression
     
     Args:
         adata: Input AnnData object
@@ -34,22 +32,6 @@ def preprocess_state_paper(adata_pp: anndata.AnnData) -> anndata.AnnData:
     # 2. Log transform
     print("  - Log transforming...")  
     sc.pp.log1p(adata_pp)
-    
-    # 3. Compute highly varying genes (top 2000)
-    print("  - Computing highly varying genes (top 2000)...")
-    sc.pp.highly_variable_genes(adata_pp, n_top_genes=2000)
-    
-    # 4. Set X_hvg obsm key
-    print("  - Setting X_hvg obsm key...")
-    hvg_mask = adata_pp.var['highly_variable'].values
-    adata_pp.obsm['X_hvg'] = adata_pp.X[:, hvg_mask]
-    
-    # Fix potential DataFrame index conflicts by ensuring var index name is unique
-    if adata_pp.var.index.name in adata_pp.var.columns:
-        # If index name conflicts with a column name, rename the index
-        adata_pp.var.index.name = f"{adata_pp.var.index.name}_index"
-    
-    print(f"  - Selected {hvg_mask.sum()} highly variable genes")
     
     return adata_pp
 
@@ -125,9 +107,8 @@ def main():
     parser.add_argument(
         "--preprocess",
         action="store_true",
-        help="Apply preprocessing as in state paper: normalize to 10k read depth, "
-             "log transform, compute highly varying genes (top 2000), "
-             "and set X_hvg obsm key before writing output"
+        help="Apply preprocessing as in state paper: normalize to 10k read depth "
+             "and log transform before writing output"
     )
     
     args = parser.parse_args()
