@@ -44,6 +44,11 @@ def preprocess_state_paper(adata_pp: anndata.AnnData) -> anndata.AnnData:
     hvg_mask = adata_pp.var['highly_variable'].values
     adata_pp.obsm['X_hvg'] = adata_pp.X[:, hvg_mask]
     
+    # Fix potential DataFrame index conflicts by ensuring var index name is unique
+    if adata_pp.var.index.name in adata_pp.var.columns:
+        # If index name conflicts with a column name, rename the index
+        adata_pp.var.index.name = f"{adata_pp.var.index.name}_index"
+    
     print(f"  - Selected {hvg_mask.sum()} highly variable genes")
     
     return adata_pp
@@ -168,12 +173,12 @@ def main():
     # Apply preprocessing if requested
     if args.preprocess:
         try:
-            adata = preprocess_state_paper(adata)
+            filtered_adata = preprocess_state_paper(filtered_adata)
         except Exception as e:
             print(f"Error during preprocessing: {e}", file=sys.stderr)
             sys.exit(1)
         
-        # Save output
+    # Save output
     try:
         output_path = Path(args.output)
         output_path.parent.mkdir(parents=True, exist_ok=True)
