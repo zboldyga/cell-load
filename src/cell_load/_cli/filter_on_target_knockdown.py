@@ -6,6 +6,47 @@ import sys
 from pathlib import Path
 
 import anndata
+import scanpy as sc
+import numpy as np
+
+
+def preprocess_state_paper(adata_pp: anndata.AnnData) -> anndata.AnnData:
+    """
+    Apply preprocessing as described in the state paper:
+    1. Normalize to 10k read depth
+    2. Log transform
+    3. Compute highly varying genes (top 2000)  
+    4. Set X_hvg obsm key with highly variable gene expression
+    
+    Args:
+        adata: Input AnnData object
+    
+    Returns:
+        Preprocessed AnnData object
+    """
+    print("Applying state paper preprocessing...")
+    
+    
+    # 1. Normalize to 10k read depth
+    print("  - Normalizing to 10k read depth...")
+    sc.pp.normalize_total(adata_pp, target_sum=1e4)
+    
+    # 2. Log transform
+    print("  - Log transforming...")  
+    sc.pp.log1p(adata_pp)
+    
+    # 3. Compute highly varying genes (top 2000)
+    print("  - Computing highly varying genes (top 2000)...")
+    sc.pp.highly_variable_genes(adata_pp, n_top_genes=2000)
+    
+    # 4. Set X_hvg obsm key
+    print("  - Setting X_hvg obsm key...")
+    hvg_mask = adata_pp.var['highly_variable'].values
+    adata_pp.obsm['X_hvg'] = adata_pp.X[:, hvg_mask]
+    
+    print(f"  - Selected {hvg_mask.sum()} highly variable genes")
+    
+    return adata_pp
 
 
 def main():
@@ -76,6 +117,14 @@ def main():
         help="Column in adata.var containing gene names (default: gene_name)"
     )
     
+    parser.add_argument(
+        "--preprocess",
+        action="store_true",
+        help="Apply preprocessing as in state paper: normalize to 10k read depth, "
+             "log transform, compute highly varying genes (top 2000), "
+             "and set X_hvg obsm key before writing output"
+    )
+    
     args = parser.parse_args()
     
     # Validate input file exists
@@ -93,6 +142,7 @@ def main():
         print(f"Error loading data: {e}", file=sys.stderr)
         sys.exit(1)
     
+   
     # Import and apply filter
     try:
         from ..utils.data_utils import filter_on_target_knockdown
@@ -110,6 +160,14 @@ def main():
         )
         
         print(f"Filtered to {filtered_adata.n_obs} cells and {filtered_adata.n_vars} genes")
+
+     # Apply preprocessing if requested
+    if args.preprocess:
+        try:
+            adata = preprocess_state_paper(adata)
+        except Exception as e:
+            print(f"Error during preprocessing: {e}", file=sys.stderr)
+            sys.exit(1)
         
     except Exception as e:
         print(f"Error applying filter: {e}", file=sys.stderr)
