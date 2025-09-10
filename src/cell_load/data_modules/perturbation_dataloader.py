@@ -326,12 +326,12 @@ class PerturbationDataModule(LightningDataModule):
         # Return the control perturbation name
         return self.train_datasets[0].dataset.control_pert
 
-    def train_dataloader(self):
+    def train_dataloader(self, test=False):
         if len(self.train_datasets) == 0:
             raise ValueError(
                 "No training datasets available. Please call setup() first."
             )
-        return self._create_dataloader(self.train_datasets, test=False)
+        return self._create_dataloader(self.train_datasets, test=test)
 
     def val_dataloader(self):
         if len(self.val_datasets) == 0:
