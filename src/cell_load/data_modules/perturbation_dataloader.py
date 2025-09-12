@@ -605,6 +605,7 @@ class PerturbationDataModule(LightningDataModule):
 
             val_ctrl_indices = ctrl_indices_shuffled[:n_ctrl_val]
 
+            # Adding observational data to train if there are no training perturbations
             if n_train > 0:
                 test_ctrl_indices = ctrl_indices_shuffled[
                 n_ctrl_val : n_ctrl_val + n_ctrl_test
@@ -731,7 +732,7 @@ class PerturbationDataModule(LightningDataModule):
             elif split == "val":
                 self.val_datasets.append(test_subset)
             elif split == "test":
-                train_subset = ds.to_subset_dataset("train", np.array([]), ctrl_indices)
+                train_subset = ds.to_subset_dataset("train", np.array([]), ctrl_indices) # adding all observational data to train
                 self.train_datasets.append(train_subset)
                 counts["train"] = len(train_subset)
                 self.test_datasets.append(test_subset)
