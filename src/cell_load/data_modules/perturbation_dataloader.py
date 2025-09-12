@@ -726,13 +726,15 @@ class PerturbationDataModule(LightningDataModule):
         if celltype in zeroshot_celltypes:
             # Zeroshot: all cells go to specified split
             split = zeroshot_celltypes[celltype]
+            train_subset = ds.to_subset_dataset("train", np.array([]), ctrl_indices) # adding all observational data to train
             test_subset = ds.to_subset_dataset(split, pert_indices, ctrl_indices)
             if split == "train":
                 self.train_datasets.append(test_subset)
             elif split == "val":
+                self.train_datasets.append(train_subset)
+                counts["train"] = len(train_subset)
                 self.val_datasets.append(test_subset)
             elif split == "test":
-                train_subset = ds.to_subset_dataset("train", np.array([]), ctrl_indices) # adding all observational data to train
                 self.train_datasets.append(train_subset)
                 counts["train"] = len(train_subset)
                 self.test_datasets.append(test_subset)
