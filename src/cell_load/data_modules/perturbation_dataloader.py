@@ -604,10 +604,15 @@ class PerturbationDataModule(LightningDataModule):
             n_ctrl_test = int(len(ctrl_indices) * n_test / total_pert)
 
             val_ctrl_indices = ctrl_indices_shuffled[:n_ctrl_val]
-            test_ctrl_indices = ctrl_indices_shuffled[
+
+            if n_train > 0:
+                test_ctrl_indices = ctrl_indices_shuffled[
                 n_ctrl_val : n_ctrl_val + n_ctrl_test
-            ]
-            train_ctrl_indices = ctrl_indices_shuffled[n_ctrl_val + n_ctrl_test :]
+                ]
+                train_ctrl_indices = ctrl_indices_shuffled[n_ctrl_val + n_ctrl_test :]
+            else:
+                test_ctrl_indices = ctrl_indices_shuffled[n_ctrl_val: ]
+                train_ctrl_indices = ctrl_indices_shuffled
 
             # Create subsets
             if len(val_pert_indices) > 0:
@@ -622,12 +627,11 @@ class PerturbationDataModule(LightningDataModule):
                 self.test_datasets.append(subset)
                 counts["test"] = len(subset)
 
-            if len(train_pert_indices) > 0:
-                subset = ds.to_subset_dataset(
-                    "train", train_pert_indices, train_ctrl_indices
-                )
-                self.train_datasets.append(subset)
-                counts["train"] = len(subset)
+            subset = ds.to_subset_dataset(
+                "train", train_pert_indices, train_ctrl_indices
+            )
+            self.train_datasets.append(subset)
+            counts["train"] = len(subset)
 
         return counts
 
