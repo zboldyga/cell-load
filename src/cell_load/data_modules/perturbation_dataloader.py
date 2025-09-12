@@ -600,36 +600,22 @@ class PerturbationDataModule(LightningDataModule):
         total_pert = n_val + n_test + n_train
 
         if total_pert > 0:
-            n_ctrl_val = int(len(ctrl_indices) * n_val / total_pert)
-            n_ctrl_test = int(len(ctrl_indices) * n_test / total_pert)
-
-            val_ctrl_indices = ctrl_indices_shuffled[:n_ctrl_val]
-
-            # Adding observational data to train if there are no training perturbations
-            if n_train > 0:
-                test_ctrl_indices = ctrl_indices_shuffled[
-                n_ctrl_val : n_ctrl_val + n_ctrl_test
-                ]
-                train_ctrl_indices = ctrl_indices_shuffled[n_ctrl_val + n_ctrl_test :]
-            else:
-                test_ctrl_indices = ctrl_indices_shuffled[n_ctrl_val: ]
-                train_ctrl_indices = ctrl_indices_shuffled
 
             # Create subsets
             if len(val_pert_indices) > 0:
-                subset = ds.to_subset_dataset("val", val_pert_indices, val_ctrl_indices)
+                subset = ds.to_subset_dataset("val", val_pert_indices, ctrl_indices_shuffled)
                 self.val_datasets.append(subset)
                 counts["val"] = len(subset)
 
             if len(test_pert_indices) > 0:
                 subset = ds.to_subset_dataset(
-                    "test", test_pert_indices, test_ctrl_indices
+                    "test", test_pert_indices, ctrl_indices_shuffled
                 )
                 self.test_datasets.append(subset)
                 counts["test"] = len(subset)
 
             subset = ds.to_subset_dataset(
-                "train", train_pert_indices, train_ctrl_indices
+                "train", train_pert_indices, ctrl_indices_shuffled
             )
             self.train_datasets.append(subset)
             counts["train"] = len(subset)
