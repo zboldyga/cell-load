@@ -224,7 +224,9 @@ class PerturbationDataset(Dataset):
         Get the batch information for a given cell index. Returns a scalar tensor.
         """
         assert self.batch_onehot_map is not None, "No batch onehot map, run setup."
-        batch_name = self.metadata_cache.batch_categories[idx]
+        # Translate row index -> batch code -> batch category name
+        batch_code = self.metadata_cache.batch_codes[idx]
+        batch_name = self.metadata_cache.batch_categories[batch_code]
         batch = torch.argmax(self.batch_onehot_map[batch_name])
         return batch.item()
 
