@@ -600,34 +600,25 @@ class PerturbationDataModule(LightningDataModule):
         total_pert = n_val + n_test + n_train
 
         if total_pert > 0:
-            n_ctrl_val = int(len(ctrl_indices) * n_val / total_pert)
-            n_ctrl_test = int(len(ctrl_indices) * n_test / total_pert)
-
-            val_ctrl_indices = ctrl_indices_shuffled[:n_ctrl_val]
-            test_ctrl_indices = ctrl_indices_shuffled[
-                n_ctrl_val : n_ctrl_val + n_ctrl_test
-            ]
-            train_ctrl_indices = ctrl_indices_shuffled[n_ctrl_val + n_ctrl_test :]
 
             # Create subsets
             if len(val_pert_indices) > 0:
-                subset = ds.to_subset_dataset("val", val_pert_indices, val_ctrl_indices)
+                subset = ds.to_subset_dataset("val", val_pert_indices, ctrl_indices_shuffled)
                 self.val_datasets.append(subset)
                 counts["val"] = len(subset)
 
             if len(test_pert_indices) > 0:
                 subset = ds.to_subset_dataset(
-                    "test", test_pert_indices, test_ctrl_indices
+                    "test", test_pert_indices, ctrl_indices_shuffled
                 )
                 self.test_datasets.append(subset)
                 counts["test"] = len(subset)
 
-            if len(train_pert_indices) > 0:
-                subset = ds.to_subset_dataset(
-                    "train", train_pert_indices, train_ctrl_indices
-                )
-                self.train_datasets.append(subset)
-                counts["train"] = len(subset)
+            subset = ds.to_subset_dataset(
+                "train", train_pert_indices, ctrl_indices_shuffled
+            )
+            self.train_datasets.append(subset)
+            counts["train"] = len(subset)
 
         return counts
 
@@ -721,16 +712,20 @@ class PerturbationDataModule(LightningDataModule):
         if celltype in zeroshot_celltypes:
             # Zeroshot: all cells go to specified split
             split = zeroshot_celltypes[celltype]
-            subset = ds.to_subset_dataset(split, pert_indices, ctrl_indices)
-
+            train_subset = ds.to_subset_dataset("train", np.array([]), ctrl_indices) # adding all observational data to train
+            test_subset = ds.to_subset_dataset(split, pert_indices, ctrl_indices)
             if split == "train":
-                self.train_datasets.append(subset)
+                self.train_datasets.append(test_subset)
             elif split == "val":
-                self.val_datasets.append(subset)
+                self.train_datasets.append(train_subset)
+                counts["train"] = len(train_subset)
+                self.val_datasets.append(test_subset)
             elif split == "test":
-                self.test_datasets.append(subset)
+                self.train_datasets.append(train_subset)
+                counts["train"] = len(train_subset)
+                self.test_datasets.append(test_subset)
 
-            counts[split] = len(subset)
+            counts[split] = len(test_subset)
 
         elif celltype in fewshot_celltypes:
             # Fewshot: split perturbations according to config
