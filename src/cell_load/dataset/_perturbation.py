@@ -1,6 +1,7 @@
 import logging
 from pathlib import Path
 
+from functools import lru_cache
 import h5py
 import numpy as np
 import torch
@@ -12,6 +13,7 @@ from ..utils.data_utils import (
     suspected_discrete_torch,
     suspected_log_torch,
 )
+
 
 logger = logging.getLogger(__name__)
 
@@ -285,8 +287,9 @@ class PerturbationDataset(Dataset):
             all_indices = np.concatenate([perturbed_indices, control_indices])
             return Subset(self, all_indices)
         else:
-            return Subset(self, perturbed_indices)
+            return Subset(self, perturbed_indices) 
 
+    @lru_cache(maxsize=10000)   # cache the results of the function; lots of hits for batch mapping since most sentences have repeated cells
     def fetch_gene_expression(self, idx: int) -> torch.Tensor:
         """
         Fetch raw gene counts for a given cell index.
@@ -322,6 +325,7 @@ class PerturbationDataset(Dataset):
             data = torch.tensor(row_data, dtype=torch.float32)
         return data
 
+    @lru_cache(maxsize=10000)
     def fetch_obsm_expression(self, idx: int, key: str) -> torch.Tensor:
         """
         Fetch a single row from the /obsm/{key} embedding matrix.

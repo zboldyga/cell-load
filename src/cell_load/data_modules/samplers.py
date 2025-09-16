@@ -93,9 +93,9 @@ class PerturbationBatchSampler(Sampler):
         logger.info(
             f"Creating meta-batches with cell_sentence_len={cell_sentence_len}..."
         )
+        start_time = time.time()
         self.batches = self._create_batches()
         self.tot_num = tot_num
-
         end_time = time.time()
         logger.info(
             f"Sampler created with {len(self.batches)} batches in {end_time - start_time:.2f} seconds."
@@ -194,61 +194,60 @@ class PerturbationBatchSampler(Sampler):
         """
         Process a single subset to create batches based on H5 codes.
 
-        For each subset, the method:
-          - Retrieves the subset indices.
-          - Extracts the corresponding cell type and perturbation codes from the cache.
-          - Constructs a structured array with two fields (cell, pert) so that unique
-            (cell_type, perturbation) pairs can be identified using np.unique.
-          - For each unique pair, shuffles the indices and splits them into batches.
+        Optimized version with integer group encoding:
+        - Groups are encoded into a single integer via np.ravel_multi_index.
+        - Sorting/grouping is done on simple integers instead of structured dtypes.
+        - Much faster for large numbers of groups.
         """
         base_dataset = subset.dataset
         indices = np.array(subset.indices)
         cache: H5MetadataCache = self.metadata_caches[base_dataset.h5_path]
 
-        # Use codes directly rather than names.
+        # Codes
         cell_codes = cache.cell_type_codes[indices]
         pert_codes = cache.pert_codes[indices]
 
-        if "use_batch" in self.__dict__ and self.use_batch:
-            # If using batch, we need to use the batch codes instead of cell type codes.
+        if getattr(self, "use_batch", False):
             batch_codes = cache.batch_codes[indices]
-            # Also get batch codes if grouping by batch is desired.
-            batch_codes = cache.batch_codes[indices]
-            dt = np.dtype(
-                [
-                    ("batch", batch_codes.dtype),
-                    ("cell", cell_codes.dtype),
-                    ("pert", pert_codes.dtype),
-                ]
+            # Encode (batch, cell, pert) into one integer
+            group_keys = np.ravel_multi_index(
+                (batch_codes, cell_codes, pert_codes),
+                (batch_codes.max() + 1, cell_codes.max() + 1, pert_codes.max() + 1)
             )
-            groups = np.empty(len(indices), dtype=dt)
-            groups["batch"] = batch_codes
-            groups["cell"] = cell_codes
-            groups["pert"] = pert_codes
         else:
-            dt = np.dtype([("cell", cell_codes.dtype), ("pert", pert_codes.dtype)])
-            groups = np.empty(len(indices), dtype=dt)
-            groups["cell"] = cell_codes
-            groups["pert"] = pert_codes
+            # Encode (cell, pert) into one integer
+            group_keys = np.ravel_multi_index(
+                (cell_codes, pert_codes),
+                (cell_codes.max() + 1, pert_codes.max() + 1)
+            )
 
-        # Create global indices (assuming that indices in each subset refer to a global concatenation).
+        # Global indices
         global_indices = np.arange(global_offset, global_offset + len(indices))
 
+        # Sort once by group key
+        order = np.argsort(group_keys)
+        sorted_keys = group_keys[order]
+        sorted_indices = global_indices[order]
+
+        # Find group boundaries
+        unique_keys, group_starts = np.unique(sorted_keys, return_index=True)
+        group_starts = np.r_[group_starts, len(sorted_keys)]
+
         subset_batches = []
-        # Group by unique (cell, pert) pairs.
-        for group_key in np.unique(groups):
-            mask = groups == group_key
-            group_indices = global_indices[mask]
+
+        # Iterate groups
+        for start, end in zip(group_starts[:-1], group_starts[1:]):
+            group_indices = sorted_indices[start:end]
             np.random.shuffle(group_indices)
 
-            # Split the group indices into batches.
             for i in range(0, len(group_indices), self.cell_sentence_len):
-                sentence = group_indices[i : i + self.cell_sentence_len].tolist()
+                sentence = group_indices[i : i + self.cell_sentence_len]
                 if len(sentence) < self.cell_sentence_len and self.drop_last:
                     continue
-                subset_batches.append(sentence)
+                subset_batches.append(sentence.tolist())
 
         return subset_batches
+
 
     def _create_sentences(self) -> list[list[int]]:
         """
@@ -260,8 +259,8 @@ class PerturbationBatchSampler(Sampler):
             subset_batches = self._process_subset(global_offset, subset)
             all_batches.extend(subset_batches)
             global_offset += len(subset)
-
         np.random.shuffle(all_batches)
+
         return all_batches
 
     def __iter__(self) -> Iterator[list[int]]:
