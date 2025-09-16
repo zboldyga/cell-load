@@ -49,7 +49,7 @@ def main() -> None:
     print(f"Time to get train_loader: {loader_elapsed:.2f} seconds")
     print(f"Control perturbation: {dm.get_control_pert()}")
 
-    num_batches = 5
+    num_batches = 25
     batch_start = time.time()
     for i, batch in enumerate(train_loader):
         shapes = {k: _shape_of(v) for k, v in batch.items()}

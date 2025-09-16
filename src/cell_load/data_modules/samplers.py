@@ -289,7 +289,12 @@ class PerturbationBatchSampler(Sampler):
     def __iter__(self) -> Iterator[list[int]]:
         # Shuffle the order of batches each time we iterate in non-distributed mode.
         if not self.distributed:
+            import time
+            start_time = time.time()
+            print("Creating batches")
             self.batches = self._create_batches()
+            elapsed = time.time() - start_time
+            print(f"Batches created (took {elapsed:.2f} seconds)")
         yield from self.batches
 
     def __len__(self) -> int:
