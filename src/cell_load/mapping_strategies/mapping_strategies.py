@@ -95,7 +95,6 @@ class BaseMappingStrategy(ABC):
         If get_basal_raw is True, returns the raw expression of the basal cells as well
         (control_expr, control_expr, control_raw), or (perturbed_expr, control_expr, control_raw) for perturbed cells.
         """
-
         # Get expression(s) based on embed_key
         if dataset.embed_key:
             control_index = self.get_control_index(dataset, split, perturbed_idx)
