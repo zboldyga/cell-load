@@ -46,17 +46,29 @@ def test_zeroshot_excludes_celltype(synthetic_data):
         assert len(dm.train_datasets) > 0, "No training datasets created"
         assert len(dm.test_datasets) > 0, "No test datasets created"
 
-        # Verify zeroshot cell type is not in training data
+        # Verify zeroshot cell type has only control cells in training data
+        # (observational data from zeroshot cell types is now included in training)
         train_celltypes = set()
+        train_pert_names = set()
         for subset in dm.train_datasets:
             ds = subset.dataset
             for idx in subset.indices:
-                train_celltypes.add(ds.get_cell_type(idx))
+                ct = ds.get_cell_type(idx)
+                train_celltypes.add(ct)
+                if ct == zs_ct:
+                    # If zeroshot cell type is in training, it should only be control cells
+                    pert_name = ds.get_perturbation_name(idx)
+                    train_pert_names.add(pert_name)
 
         print(f"Training cell types: {train_celltypes}")
-        assert zs_ct not in train_celltypes, (
-            f"Zeroshot cell type {zs_ct} found in training data"
-        )
+        print(f"Training perturbations for {zs_ct}: {train_pert_names}")
+        
+        # If zeroshot cell type is in training, all should be control cells
+        if zs_ct in train_celltypes:
+            assert train_pert_names == {"P0"}, (
+                f"Zeroshot cell type {zs_ct} should only have control cells in training, "
+                f"but found perturbations: {train_pert_names}"
+            )
 
         # Verify zeroshot cell type is in test data
         test_celltypes = set()
@@ -197,20 +209,34 @@ def test_training_dataset_behavior(synthetic_data):
 
         assert len(dm.train_datasets) > 0, "No training datasets created"
 
-        # Get all cell types in training data
+        # Get all cell types in training data and check zeroshot behavior
         train_celltypes = set()
+        train_ct0_perts = set()
         for subset in dm.train_datasets:
             ds = subset.dataset
             for idx in subset.indices:
-                train_celltypes.add(ds.get_cell_type(idx))
+                ct = ds.get_cell_type(idx)
+                train_celltypes.add(ct)
+                if ct == "CT0":
+                    # CT0 is zeroshot, should only have control cells in training
+                    pert_name = ds.get_perturbation_name(idx)
+                    train_ct0_perts.add(pert_name)
 
         print(f"Training cell types found: {train_celltypes}")
+        print(f"CT0 perturbations in training: {train_ct0_perts}")
 
         # Should include CT1, CT2 from dataset1 and CT3, CT4, CT5 from dataset2
-        # Should NOT include CT0 (zeroshot)
-        expected_celltypes = {"CT1", "CT2", "CT3", "CT4", "CT5"}
+        # CT0 can be in training but only with control perturbations
+        expected_celltypes = {"CT0", "CT1", "CT2", "CT3", "CT4", "CT5"}
 
-        assert "CT0" not in train_celltypes, "CT0 should not be in training (zeroshot)"
+        # If CT0 is in training (which it should be for observational data), 
+        # it should only have control cells
+        if "CT0" in train_celltypes:
+            assert train_ct0_perts == {"P0"}, (
+                f"CT0 in training should only have control cells, "
+                f"but found perturbations: {train_ct0_perts}"
+            )
+            
         assert train_celltypes == expected_celltypes, (
             f"Expected {expected_celltypes}, got {train_celltypes}"
         )
@@ -606,11 +632,31 @@ def test_complex_fewshot_scenario(synthetic_data):
         print(f"Val celltypes: {val_cts}")
         print(f"Test celltypes: {test_cts}")
 
-        # Verify expected distributions
-        assert "CT0" not in train_cts, (
-            "CT0 should not be in training (zeroshot to test)"
-        )
-        assert "CT1" not in train_cts, "CT1 should not be in training (zeroshot to val)"
+        # Check perturbations for zeroshot cell types in training
+        # CT0 and CT1 can be in training but only as control cells
+        train_ct0_perts = set()
+        train_ct1_perts = set()
+        for subset in dm.train_datasets:
+            ds = subset.dataset
+            for idx in subset.indices:
+                ct = ds.get_cell_type(idx)
+                pert = ds.get_perturbation_name(idx)
+                if ct == "CT0":
+                    train_ct0_perts.add(pert)
+                elif ct == "CT1":
+                    train_ct1_perts.add(pert)
+
+        # Verify zeroshot cell types only have control perturbations in training
+        if "CT0" in train_cts:
+            assert train_ct0_perts == {"P0"}, (
+                f"CT0 in training should only have control cells, "
+                f"but found perturbations: {train_ct0_perts}"
+            )
+        if "CT1" in train_cts:
+            assert train_ct1_perts == {"P0"}, (
+                f"CT1 in training should only have control cells, "
+                f"but found perturbations: {train_ct1_perts}"
+            )
         assert "CT2" in train_cts, "CT2 should be in training (fewshot partial)"
         assert {"CT3", "CT4", "CT5"}.issubset(train_cts), (
             "Training dataset cell types should be in training"
