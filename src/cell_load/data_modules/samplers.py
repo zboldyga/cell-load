@@ -75,27 +75,14 @@ class PerturbationBatchSampler(Sampler):
 
         # Create caches for all unique H5 files.
         self.metadata_caches = {}
-        start_time = time.time()
         for subset in self.dataset.datasets:
             base_dataset: PerturbationDataset = subset.dataset
             self.metadata_caches[base_dataset.h5_path] = base_dataset.metadata_cache
-        metadata_cache_elapsed = time.time() - start_time
-        print(
-            f"Time to create metadata caches: {metadata_cache_elapsed:.2f} seconds."
-        )
 
         # Create batches using the code-based grouping.
-        start_time = time.time()
         self.sentences = self._create_sentences()
-        sentences_elapsed = time.time() - start_time
-        print(
-            f"Time to create sentences: {sentences_elapsed:.2f} seconds."
-        )
         sentence_lens = [len(sentence) for sentence in self.sentences]
         avg_num = np.mean(sentence_lens)
-        print(f"Average sentence length: {avg_num:.2f}")
-        # number of sentences with length 0
-        print(f"Number of sentences with length 0: {np.sum(np.array(sentence_lens) == 0)}")
         std_num = np.std(sentence_lens)
         tot_num = np.sum(sentence_lens)
         logger.info(
@@ -108,12 +95,7 @@ class PerturbationBatchSampler(Sampler):
         )
         start_time = time.time()
         self.batches = self._create_batches()
-        batches_elapsed = time.time() - start_time
-        print(
-            f"Time to create batches: {batches_elapsed:.2f} seconds."
-        )
         self.tot_num = tot_num
-
         end_time = time.time()
         logger.info(
             f"Sampler created with {len(self.batches)} batches in {end_time - start_time:.2f} seconds."
@@ -273,15 +255,10 @@ class PerturbationBatchSampler(Sampler):
         """
         global_offset = 0
         all_batches = []
-        start_time = time.time()
         for subset in self.dataset.datasets:
             subset_batches = self._process_subset(global_offset, subset)
             all_batches.extend(subset_batches)
             global_offset += len(subset)
-        process_elapsed = time.time() - start_time
-        print(
-            f"Time to process subsets: {process_elapsed:.2f} seconds."
-        )
         np.random.shuffle(all_batches)
 
         return all_batches
@@ -289,12 +266,7 @@ class PerturbationBatchSampler(Sampler):
     def __iter__(self) -> Iterator[list[int]]:
         # Shuffle the order of batches each time we iterate in non-distributed mode.
         if not self.distributed:
-            import time
-            start_time = time.time()
-            print("Creating batches")
             self.batches = self._create_batches()
-            elapsed = time.time() - start_time
-            print(f"Batches created (took {elapsed:.2f} seconds)")
         yield from self.batches
 
     def __len__(self) -> int:

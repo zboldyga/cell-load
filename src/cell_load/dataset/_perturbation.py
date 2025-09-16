@@ -325,6 +325,7 @@ class PerturbationDataset(Dataset):
             data = torch.tensor(row_data, dtype=torch.float32)
         return data
 
+    @lru_cache(maxsize=10000)
     def fetch_obsm_expression(self, idx: int, key: str) -> torch.Tensor:
         """
         Fetch a single row from the /obsm/{key} embedding matrix.
