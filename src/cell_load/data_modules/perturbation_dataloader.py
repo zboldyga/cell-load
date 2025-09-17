@@ -718,7 +718,7 @@ class PerturbationDataModule(LightningDataModule):
             # Zeroshot: all cells go to specified split
             split = zeroshot_celltypes[celltype]
             train_subset = ds.to_subset_dataset(
-                "train", np.array([]), ctrl_indices
+                "train", np.array([], dtype=np.int64), ctrl_indices
             )  # adding all observational data to train
             test_subset = ds.to_subset_dataset(split, pert_indices, ctrl_indices)
             if split == "train":
