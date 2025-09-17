@@ -8,6 +8,7 @@ authors = [
     { name = "Yusuf Roohani", email = "yusuf.roohani@arcinstitute.org" },
     { name = "Noam Teyssier", email = "noam.teyssier@arcinstitute.org" },
     { name = "Rishi Verma", email = "rishi.verma@arcinstitute.org" },
+    { name = "Francis Chalissery", email = "francis.chalissery@arcinstitute.org" },
     { name = "Beatrice Bevilacqua", email = "beatrice.bevilacqua@arcinstitute.org" },
 ]
 requires-python = ">=3.10,<3.13"
