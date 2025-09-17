@@ -83,6 +83,10 @@ class PerturbationDataset(Dataset):
         self.store_raw_basal = store_raw_basal
         self.barcode = barcode
         self.output_space = kwargs.get("output_space", "gene")
+        if self.output_space not in {"gene", "all", "embedding"}:
+            raise ValueError(
+                f"output_space must be one of 'gene', 'all', or 'embedding'; got {self.output_space!r}"
+            )
 
         # Load metadata cache and open file
         self.metadata_cache = GlobalH5MetadataCache().get_cache(
@@ -197,7 +201,7 @@ class PerturbationDataset(Dataset):
         }
 
         # Optionally include raw expressions for the perturbed cell, for training a decoder
-        if self.store_raw_expression:
+        if self.store_raw_expression and self.output_space != "embedding":
             if self.output_space == "gene":
                 sample["pert_cell_counts"] = self.fetch_obsm_expression(
                     file_idx, "X_hvg"
@@ -206,7 +210,7 @@ class PerturbationDataset(Dataset):
                 sample["pert_cell_counts"] = self.fetch_gene_expression(file_idx)
 
         # Optionally include raw expressions for the control cell
-        if self.store_raw_basal:
+        if self.store_raw_basal and self.output_space != "embedding":
             if self.output_space == "gene":
                 sample["ctrl_cell_counts"] = self.fetch_obsm_expression(
                     ctrl_idx, "X_hvg"

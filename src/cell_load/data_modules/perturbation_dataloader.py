@@ -44,7 +44,7 @@ class PerturbationDataModule(LightningDataModule):
         cell_type_key: str = "cell_type",
         control_pert: str = "non-targeting",
         embed_key: Literal["X_hvg", "X_state"] | None = None,
-        output_space: Literal["gene", "all"] = "gene",
+        output_space: Literal["gene", "all", "embedding"] = "gene",
         basal_mapping_strategy: Literal["batch", "random"] = "random",
         n_basal_samples: int = 1,
         should_yield_control_cells: bool = True,
@@ -65,7 +65,7 @@ class PerturbationDataModule(LightningDataModule):
             few_shot_percent: Fraction of data to use for few-shot tasks
             random_seed: For reproducible splits & sampling
             embed_key: Embedding key or matrix in the H5 file to use for feauturizing cells
-            output_space: The output space for model predictions (gene or latent, which uses embed_key)
+            output_space: The output space for model predictions (gene, all genes, or embedding-only)
             basal_mapping_strategy: One of {"batch","random","nearest","ot"}
             n_basal_samples: Number of control cells to sample per perturbed cell
             cache_perturbation_control_pairs: If True cache perturbation-control pairs at the start of training and reuse them.
@@ -92,6 +92,10 @@ class PerturbationDataModule(LightningDataModule):
         self.control_pert = control_pert
         self.embed_key = embed_key
         self.output_space = output_space
+        if self.output_space not in {"gene", "all", "embedding"}:
+            raise ValueError(
+                f"output_space must be one of 'gene', 'all', or 'embedding'; got {self.output_space!r}"
+            )
 
         # Sampling and mapping
         self.n_basal_samples = n_basal_samples
