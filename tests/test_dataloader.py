@@ -62,7 +62,7 @@ def test_zeroshot_excludes_celltype(synthetic_data):
 
         print(f"Training cell types: {train_celltypes}")
         print(f"Training perturbations for {zs_ct}: {train_pert_names}")
-        
+
         # If zeroshot cell type is in training, all should be control cells
         if zs_ct in train_celltypes:
             assert train_pert_names == {"P0"}, (
@@ -229,14 +229,14 @@ def test_training_dataset_behavior(synthetic_data):
         # CT0 can be in training but only with control perturbations
         expected_celltypes = {"CT0", "CT1", "CT2", "CT3", "CT4", "CT5"}
 
-        # If CT0 is in training (which it should be for observational data), 
+        # If CT0 is in training (which it should be for observational data),
         # it should only have control cells
         if "CT0" in train_celltypes:
             assert train_ct0_perts == {"P0"}, (
                 f"CT0 in training should only have control cells, "
                 f"but found perturbations: {train_ct0_perts}"
             )
-            
+
         assert train_celltypes == expected_celltypes, (
             f"Expected {expected_celltypes}, got {train_celltypes}"
         )

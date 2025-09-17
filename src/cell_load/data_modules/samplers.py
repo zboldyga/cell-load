@@ -212,13 +212,12 @@ class PerturbationBatchSampler(Sampler):
             # Encode (batch, cell, pert) into one integer
             group_keys = np.ravel_multi_index(
                 (batch_codes, cell_codes, pert_codes),
-                (batch_codes.max() + 1, cell_codes.max() + 1, pert_codes.max() + 1)
+                (batch_codes.max() + 1, cell_codes.max() + 1, pert_codes.max() + 1),
             )
         else:
             # Encode (cell, pert) into one integer
             group_keys = np.ravel_multi_index(
-                (cell_codes, pert_codes),
-                (cell_codes.max() + 1, pert_codes.max() + 1)
+                (cell_codes, pert_codes), (cell_codes.max() + 1, pert_codes.max() + 1)
             )
 
         # Global indices
@@ -247,7 +246,6 @@ class PerturbationBatchSampler(Sampler):
                 subset_batches.append(sentence.tolist())
 
         return subset_batches
-
 
     def _create_sentences(self) -> list[list[int]]:
         """

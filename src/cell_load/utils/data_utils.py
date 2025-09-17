@@ -300,11 +300,12 @@ def is_on_target_knockdown(
         control_cells = (adata.obs[perturbation_column] == control_label).values
         control_mean = _mean(X[control_cells, gene_idx])
 
-    if control_mean == 0:
-        raise ValueError(
-            f"Mean {target_gene!r} expression in control cells is zero; "
-            "cannot compute knock-down ratio."
+    if np.isclose(control_mean, 0.0):
+        log.warning(
+            "Skipping perturbation %r: control mean expression is zero; cannot compute knock-down ratio.",
+            target_gene,
         )
+        return False
 
     try:
         perturbed_mean = _mean(X[perturbed_cells, gene_idx])
@@ -382,16 +383,19 @@ def filter_on_target_knockdown(
                 print(control_cells.shape, control_cells)
                 print(gene_idx)
                 print(X[control_cells, gene_idx].shape)
-            if ctrl_mean == 0:
-                raise ValueError(
-                    f"Mean {pert!r} expression in control cells is zero; "
-                    "cannot compute knock-down ratio."
-                )
             control_mean_cache[pert] = ctrl_mean
         else:
             ctrl_mean = control_mean_cache[pert]
 
         pert_cells = (perts == pert).values
+
+        if np.isclose(ctrl_mean, 0.0):
+            log.warning(
+                "Skipping cell-level filtering for perturbation %r because control mean expression is zero.",
+                pert,
+            )
+            keep_mask[pert_cells] = False
+            continue
         # FIX: Replace .A1 with .toarray().flatten() for scipy sparse matrices
         expr_vals = (
             X[pert_cells, gene_idx].toarray().flatten()
