@@ -243,7 +243,7 @@ class PerturbationDataset(Dataset):
         Get the cell type for a given index.
         """
         # Convert idx to int in case it's a tensor or array
-        idx = int(idx) if hasattr(idx, '__int__') else idx
+        idx = int(idx) if hasattr(idx, "__int__") else idx
         code = self.metadata_cache.cell_type_codes[idx]
         return self.metadata_cache.cell_type_categories[code]
 
@@ -259,7 +259,7 @@ class PerturbationDataset(Dataset):
         Get the perturbation name for a given index.
         """
         # Convert idx to int in case it's a tensor or array
-        idx = int(idx) if hasattr(idx, '__int__') else idx
+        idx = int(idx) if hasattr(idx, "__int__") else idx
         pert_code = self.metadata_cache.pert_codes[idx]
         return self.metadata_cache.pert_categories[pert_code]
 
@@ -291,9 +291,11 @@ class PerturbationDataset(Dataset):
             all_indices = np.concatenate([perturbed_indices, control_indices])
             return Subset(self, all_indices)
         else:
-            return Subset(self, perturbed_indices) 
+            return Subset(self, perturbed_indices)
 
-    @lru_cache(maxsize=10000)   # cache the results of the function; lots of hits for batch mapping since most sentences have repeated cells
+    @lru_cache(
+        maxsize=10000
+    )  # cache the results of the function; lots of hits for batch mapping since most sentences have repeated cells
     def fetch_gene_expression(self, idx: int) -> torch.Tensor:
         """
         Fetch raw gene counts for a given cell index.

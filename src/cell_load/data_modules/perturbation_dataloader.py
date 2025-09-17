@@ -600,10 +600,11 @@ class PerturbationDataModule(LightningDataModule):
         total_pert = n_val + n_test + n_train
 
         if total_pert > 0:
-
             # Create subsets
             if len(val_pert_indices) > 0:
-                subset = ds.to_subset_dataset("val", val_pert_indices, ctrl_indices_shuffled)
+                subset = ds.to_subset_dataset(
+                    "val", val_pert_indices, ctrl_indices_shuffled
+                )
                 self.val_datasets.append(subset)
                 counts["val"] = len(subset)
 
@@ -712,7 +713,9 @@ class PerturbationDataModule(LightningDataModule):
         if celltype in zeroshot_celltypes:
             # Zeroshot: all cells go to specified split
             split = zeroshot_celltypes[celltype]
-            train_subset = ds.to_subset_dataset("train", np.array([]), ctrl_indices) # adding all observational data to train
+            train_subset = ds.to_subset_dataset(
+                "train", np.array([]), ctrl_indices
+            )  # adding all observational data to train
             test_subset = ds.to_subset_dataset(split, pert_indices, ctrl_indices)
             if split == "train":
                 self.train_datasets.append(test_subset)

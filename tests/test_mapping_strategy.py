@@ -525,7 +525,9 @@ class TestBatchMappingStrategy:
         strategy = dataset.mapping_strategy
         assert isinstance(strategy, BatchMappingStrategy)
 
-        strategy.register_split_indices(dataset, "train", perturbed_indices, control_indices)
+        strategy.register_split_indices(
+            dataset, "train", perturbed_indices, control_indices
+        )
 
         # Keys should be tuples of (batch, cell_type)
         for key, pool in strategy.split_control_maps["train"].items():
@@ -545,7 +547,9 @@ class TestBatchMappingStrategy:
         strategy = dataset.mapping_strategy
         assert isinstance(strategy, BatchMappingStrategy)
 
-        strategy.register_split_indices(dataset, "train", perturbed_indices, control_indices)
+        strategy.register_split_indices(
+            dataset, "train", perturbed_indices, control_indices
+        )
 
         pert_idx = int(perturbed_indices[0])
         pert_batch = dataset.get_batch(pert_idx)
