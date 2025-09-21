@@ -145,14 +145,19 @@ class PerturbationDataModule(LightningDataModule):
         # Initialize global maps
         self._setup_global_maps()
 
+    def _get_reference_dataset(self) -> PerturbationDataset:
+        """Return a dataset to read metadata from, preferring test → val → train."""
+        for datasets in (self.test_datasets, self.val_datasets, self.train_datasets):
+            if datasets:
+                return datasets[0].dataset
+        raise ValueError("No datasets available to extract metadata.")
+
     def get_var_names(self):
         """
-        Get the variable names (gene names) from the first dataset.
+        Get the variable names (gene names) from the first available dataset.
         This assumes all datasets have the same gene names.
         """
-        if len(self.test_datasets) == 0:
-            raise ValueError("No test datasets available to extract variable names.")
-        underlying_ds: PerturbationDataset = self.test_datasets[0].dataset
+        underlying_ds = self._get_reference_dataset()
         return underlying_ds.get_gene_names(output_space=self.output_space)
 
     def setup(self, stage: str | None = None):
@@ -247,7 +252,7 @@ class PerturbationDataModule(LightningDataModule):
         return cls(**save_dict, **kwargs)
 
     def get_var_dims(self):
-        underlying_ds: PerturbationDataset = self.test_datasets[0].dataset
+        underlying_ds = self._get_reference_dataset()
         if self.embed_key:
             input_dim = underlying_ds.get_dim_for_obsm(self.embed_key)
         else:
@@ -339,6 +344,8 @@ class PerturbationDataModule(LightningDataModule):
 
     def val_dataloader(self):
         if len(self.val_datasets) == 0:
+            if len(self.test_datasets) == 0:
+                return None
             return self._create_dataloader(self.test_datasets, test=False)
         return self._create_dataloader(self.val_datasets, test=False)
 
