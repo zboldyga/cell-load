@@ -345,18 +345,18 @@ class PerturbationDataModule(LightningDataModule):
     def val_dataloader(self):
         if len(self.val_datasets) == 0:
             if len(self.test_datasets) == 0:
-                return None
+                return []
             return self._create_dataloader(self.test_datasets, test=False)
         return self._create_dataloader(self.val_datasets, test=False)
 
     def test_dataloader(self):
         if len(self.test_datasets) == 0:
-            return None
+            return []
         return self._create_dataloader(self.test_datasets, test=True, batch_size=1)
 
     def predict_dataloader(self):
         if len(self.test_datasets) == 0:
-            return None
+            return []
         return self._create_dataloader(self.test_datasets, test=True)
 
     # Helper functions to set up global maps and datasets
