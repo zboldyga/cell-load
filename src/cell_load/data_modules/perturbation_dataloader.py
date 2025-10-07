@@ -390,6 +390,7 @@ class PerturbationDataModule(LightningDataModule):
             batch_sampler=sampler,
             num_workers=self.num_workers,
             collate_fn=collate_fn,
+            persistent_workers=True if self.num_workers > 1 else False,
             pin_memory=True,
             prefetch_factor=4 if not test and self.num_workers > 0 else None,
         )
