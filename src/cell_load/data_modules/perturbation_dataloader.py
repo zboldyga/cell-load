@@ -51,6 +51,7 @@ class PerturbationDataModule(LightningDataModule):
         cell_sentence_len: int = 512,
         cache_perturbation_control_pairs: bool = False,
         drop_last: bool = False,
+        group_by_cell_line: bool = False,
         **kwargs,  # missing perturbation_features_file  and store_raw_basal for backwards compatibility
     ):
         """
@@ -70,6 +71,7 @@ class PerturbationDataModule(LightningDataModule):
             n_basal_samples: Number of control cells to sample per perturbed cell
             cache_perturbation_control_pairs: If True cache perturbation-control pairs at the start of training and reuse them.
             drop_last: Whether to drop the last sentence set if it is smaller than cell_sentence_len
+            group_by_cell_line: If True, batches will only contain sentences from the same cell line
         """
         super().__init__()
 
@@ -102,6 +104,7 @@ class PerturbationDataModule(LightningDataModule):
         self.cell_sentence_len = cell_sentence_len
         self.should_yield_control_cells = should_yield_control_cells
         self.cache_perturbation_control_pairs = cache_perturbation_control_pairs
+        self.group_by_cell_line = group_by_cell_line
 
         # Optional behaviors
         self.map_controls = kwargs.get("map_controls", True)
@@ -383,6 +386,7 @@ class PerturbationDataModule(LightningDataModule):
             cell_sentence_len=self.cell_sentence_len,
             test=test,
             use_batch=use_batch,
+            group_by_cell_line=self.group_by_cell_line,
         )
 
         return DataLoader(

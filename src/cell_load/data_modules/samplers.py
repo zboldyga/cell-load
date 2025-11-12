@@ -35,6 +35,7 @@ class PerturbationBatchSampler(Sampler):
         use_batch: bool = False,
         seed: int = 0,
         epoch: int = 0,
+        group_by_cell_line: bool = False,
     ):
         logger.info(
             "Creating perturbation batch sampler with metadata caching (using codes)..."
@@ -59,6 +60,7 @@ class PerturbationBatchSampler(Sampler):
 
         self.cell_sentence_len = cell_sentence_len
         self.drop_last = drop_last
+        self.group_by_cell_line = group_by_cell_line
 
         # Setup distributed settings if distributed mode is enabled.
         self.distributed = False
@@ -107,14 +109,24 @@ class PerturbationBatchSampler(Sampler):
         sampling with replacement if needed to reach cell_sentence_len.
 
         IF distributed, each rank will process a subset of the sentences.
-        """
 
+        If group_by_cell_line is True, batches will only contain sentences from the same cell line.
+        """
         if self.distributed:
             rank_sentences = self._get_rank_sentences()
-
         else:
             rank_sentences = self.sentences
 
+        # If grouping by cell line, group sentences by cell type first
+        if self.group_by_cell_line:
+            return self._create_batches_grouped_by_cell_line(rank_sentences)
+        else:
+            return self._create_batches_standard(rank_sentences)
+
+    def _create_batches_standard(self, rank_sentences: list[list[int]]) -> list[list[int]]:
+        """
+        Original batch creation logic (when not grouping by cell line).
+        """
         all_batches = []
         current_batch = []
 
@@ -157,6 +169,77 @@ class PerturbationBatchSampler(Sampler):
 
         return all_batches
 
+    def _create_batches_grouped_by_cell_line(self, rank_sentences: list[list[int]]) -> list[list[int]]:
+        """
+        Create batches grouped by cell line. Each batch contains only sentences from the same cell line.
+        Sentences within each batch are shuffled randomly.
+        """
+        # Group sentences by cell type code
+        sentences_by_cell_type: dict[int, list[list[int]]] = {}
+        for sentence in rank_sentences:
+            cell_type_code = self._get_cell_type_code_for_sentence(sentence)
+            if cell_type_code not in sentences_by_cell_type:
+                sentences_by_cell_type[cell_type_code] = []
+            sentences_by_cell_type[cell_type_code].append(sentence)
+
+        # Shuffle sentences within each cell type group
+        for cell_type_code in sentences_by_cell_type:
+            np.random.shuffle(sentences_by_cell_type[cell_type_code])
+
+        all_batches = []
+        num_full = 0
+        num_partial = 0
+
+        # Process each cell type separately
+        for cell_type_code, cell_type_sentences in sentences_by_cell_type.items():
+            current_batch = []
+
+            for sentence in cell_type_sentences:
+                # If batch is smaller than cell_sentence_len, sample with replacement
+                if len(sentence) < self.cell_sentence_len and not self.test:
+                    new_sentence = np.random.choice(
+                        sentence, size=self.cell_sentence_len, replace=True
+                    ).tolist()
+                    num_partial += 1
+                else:
+                    new_sentence = copy.deepcopy(sentence)
+                    assert len(new_sentence) == self.cell_sentence_len or self.test
+                    num_full += 1
+
+                sentence_len = len(new_sentence) if self.test else self.cell_sentence_len
+
+                # Check if adding this sentence would exceed batch size
+                if len(current_batch) + len(new_sentence) <= self.batch_size * sentence_len:
+                    current_batch.extend(new_sentence)
+                else:
+                    # Finalize current batch if it has content
+                    if current_batch:
+                        # Shuffle cell indices within the batch
+                        np.random.shuffle(current_batch)
+                        all_batches.append(current_batch)
+                    # Start new batch with this sentence
+                    current_batch = new_sentence
+
+            # Add the last batch for this cell type if it exists
+            if current_batch:
+                if not self.drop_last or len(current_batch) >= self.batch_size * sentence_len:
+                    # Shuffle cell indices within the batch
+                    np.random.shuffle(current_batch)
+                    all_batches.append(current_batch)
+
+        if self.distributed:
+            logger.info(
+                f"Rank {self.rank}: Created {len(all_batches)} batches grouped by cell line. "
+                f"{num_full} full sentences, {num_partial} partial sentences."
+            )
+        else:
+            logger.info(
+                f"Created {len(all_batches)} batches grouped by cell line. "
+                f"{num_full} full sentences, {num_partial} partial sentences."
+            )
+
+        return all_batches
+
     def _get_rank_sentences(self) -> list[list[int]]:
         """
         Get the subset of sentences that this rank should process.
@@ -189,6 +272,45 @@ class PerturbationBatchSampler(Sampler):
         )
 
         return rank_sentences
+
+    def _get_cell_type_code_for_global_idx(self, global_idx: int) -> int:
+        """
+        Get the cell type code for a global index.
+
+        Args:
+            global_idx: Global index across all datasets
+
+        Returns:
+            Cell type code (integer)
+        """
+        # Find which subset this global index belongs to
+        current_offset = 0
+        for subset in self.dataset.datasets:
+            if global_idx < current_offset + len(subset):
+                # Convert global index to local index
+                local_idx = subset.indices[global_idx - current_offset]
+                # Get the metadata cache for this dataset
+                base_dataset: PerturbationDataset = subset.dataset
+                cache: H5MetadataCache = self.metadata_caches[base_dataset.h5_path]
+                # Return cell type code
+                return cache.cell_type_codes[local_idx]
+            current_offset += len(subset)
+        raise ValueError(f"Global index {global_idx} out of range")
+
+    def _get_cell_type_code_for_sentence(self, sentence: list[int]) -> int:
+        """
+        Get the cell type code for a sentence (all cells in sentence should have same cell type).
+
+        Args:
+            sentence: List of global indices
+
+        Returns:
+            Cell type code (integer)
+        """
+        # All cells in a sentence should have the same cell type, so just check the first one
+        if not sentence:
+            raise ValueError("Empty sentence")
+        return self._get_cell_type_code_for_global_idx(sentence[0])
 
     def _process_subset(self, global_offset: int, subset: Subset) -> list[list[int]]:
         """

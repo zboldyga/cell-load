@@ -775,3 +775,545 @@ def test_barcode_functionality(synthetic_data):
 
     finally:
         toml_path.unlink()  # Clean up temp file
+
+
+def test_group_by_cell_line_batches_contain_single_cell_line(synthetic_data):
+    """Test that when group_by_cell_line=True, batches only contain cells from one cell line."""
+    root, cell_types = synthetic_data
+
+    config = {
+        "datasets": {"dataset1": "placeholder", "dataset2": "placeholder"},
+        "training": {"dataset1": "train", "dataset2": "train"},
+    }
+
+    toml_path = create_toml_config(root, config)
+
+    try:
+        dm = make_datamodule(
+            toml_path,
+            embed_key="X_hvg",
+            batch_size=3,
+            control_pert="P0",
+            group_by_cell_line=True,
+        )
+        dm.setup()
+
+        loader = dm.train_dataloader()
+        assert loader is not None, "Train dataloader is None"
+
+        ds = loader.batch_sampler.dataset
+        sampler = loader.batch_sampler
+
+        # Verify that group_by_cell_line is set
+        assert sampler.group_by_cell_line == True, "group_by_cell_line should be True"
+
+        batches = list(sampler)
+
+        # Check that each batch contains cells from only one cell line
+        for batch_idx, batch in enumerate(batches):
+            cell_type_codes = set()
+
+            for gidx in batch:
+                offset = 0
+                for subset in ds.datasets:
+                    if gidx < offset + len(subset):
+                        local = subset.indices[gidx - offset]
+                        cache = subset.dataset.metadata_cache
+                        cell_type_codes.add(cache.cell_type_codes[local])
+                        break
+                    offset += len(subset)
+
+            assert len(cell_type_codes) == 1, (
+                f"Batch {batch_idx} contains cells from multiple cell lines: {cell_type_codes}"
+            )
+
+    finally:
+        toml_path.unlink()
+
+
+def test_group_by_cell_line_batches_can_be_shorter_than_batch_size(synthetic_data):
+    """Test that batches can be shorter than batch_size when group_by_cell_line=True."""
+    root, _ = synthetic_data
+
+    config = {
+        "datasets": {"dataset1": "placeholder"},
+        "training": {"dataset1": "train"},
+    }
+
+    toml_path = create_toml_config(root, config)
+
+    try:
+        # Use a large batch_size relative to available data
+        batch_size = 10
+        cell_sentence_len = 20
+        dm = make_datamodule(
+            toml_path,
+            embed_key="X_hvg",
+            batch_size=batch_size,
+            control_pert="P0",
+            cell_sentence_len=cell_sentence_len,
+            group_by_cell_line=True,
+        )
+        dm.setup()
+
+        loader = dm.train_dataloader()
+        sampler = loader.batch_sampler
+
+        batches = list(sampler)
+
+        # Check that we have batches shorter than batch_size * cell_sentence_len
+        # (not just the last batch)
+        expected_max_batch_size = batch_size * cell_sentence_len
+        shorter_batches = [
+            batch
+            for batch in batches
+            if len(batch) < expected_max_batch_size
+        ]
+
+        # Should have multiple shorter batches (not just the last one)
+        assert len(shorter_batches) > 0, (
+            "Should have batches shorter than batch_size * cell_sentence_len"
+        )
+
+        # Verify that shorter batches are not just at the end
+        # (at least one shorter batch should not be the last batch)
+        if len(batches) > 1:
+            non_last_shorter = [
+                i
+                for i, batch in enumerate(batches[:-1])
+                if len(batch) < expected_max_batch_size
+            ]
+            assert len(non_last_shorter) > 0, (
+                "Should have shorter batches that are not the last batch"
+            )
+
+        # Verify that shorter batches still respect single cell line constraint
+        ds = loader.batch_sampler.dataset
+        for batch in shorter_batches:
+            cell_type_codes = set()
+            for gidx in batch:
+                offset = 0
+                for subset in ds.datasets:
+                    if gidx < offset + len(subset):
+                        local = subset.indices[gidx - offset]
+                        cache = subset.dataset.metadata_cache
+                        cell_type_codes.add(cache.cell_type_codes[local])
+                        break
+                    offset += len(subset)
+            assert len(cell_type_codes) == 1, (
+                f"Shorter batch contains cells from multiple cell lines: {cell_type_codes}. "
+                f"Shorter batches should still respect group_by_cell_line constraint."
+            )
+
+    finally:
+        toml_path.unlink()
+
+
+def test_group_by_cell_line_mixed_perturbations_in_batch(synthetic_data):
+    """Test that batches contain sentences from different perturbations when group_by_cell_line=True."""
+    root, _ = synthetic_data
+
+    config = {
+        "datasets": {"dataset1": "placeholder"},
+        "training": {"dataset1": "train"},
+    }
+
+    toml_path = create_toml_config(root, config)
+
+    try:
+        # Use realistic batch_size to ensure batches contain multiple sentences
+        # With batch_size=64 and cell_sentence_len=20, batches can contain up to 64 sentences
+        batch_size = 64
+        cell_sentence_len = 20
+        dm = make_datamodule(
+            toml_path,
+            embed_key="X_hvg",
+            batch_size=batch_size,
+            control_pert="P0",
+            cell_sentence_len=cell_sentence_len,
+            group_by_cell_line=True,
+        )
+        dm.setup()
+
+        loader = dm.train_dataloader()
+        ds = loader.batch_sampler.dataset
+        sampler = loader.batch_sampler
+
+        batches = list(sampler)
+
+        # Check that batches contain sentences from multiple perturbations
+        batches_with_multiple_perts = 0
+        batches_with_multiple_sentences = 0
+        for batch_idx, batch in enumerate(batches):
+            # Break batch into sentences
+            pert_codes_per_sentence = []
+            for i in range(0, len(batch), cell_sentence_len):
+                chunk = batch[i : i + cell_sentence_len]
+                if len(chunk) == cell_sentence_len:  # Only check full sentences
+                    pert_codes = set()
+                    for gidx in chunk:
+                        offset = 0
+                        for subset in ds.datasets:
+                            if gidx < offset + len(subset):
+                                local = subset.indices[gidx - offset]
+                                cache = subset.dataset.metadata_cache
+                                pert_codes.add(cache.pert_codes[local])
+                                break
+                            offset += len(subset)
+                    pert_codes_per_sentence.append(pert_codes)
+
+            # Count batches with multiple sentences
+            if len(pert_codes_per_sentence) > 1:
+                batches_with_multiple_sentences += 1
+                # Check if this batch has sentences from multiple perturbations
+                all_perts = set()
+                for pert_set in pert_codes_per_sentence:
+                    all_perts.update(pert_set)
+                if len(all_perts) > 1:
+                    batches_with_multiple_perts += 1
+
+        # With realistic batch sizes, batches should contain multiple sentences
+        # Verify that batches with multiple sentences contain sentences from different perturbations
+        # This demonstrates that the shuffling mechanism allows mixing across perturbations
+        assert batches_with_multiple_sentences > 0, (
+            f"Expected batches with multiple sentences, but found none. "
+            f"This suggests batch_size may be too small or data distribution is unusual."
+        )
+        
+        # With realistic batch sizes and shuffled sentences, we should see batches with multiple perturbations
+        # The shuffling of sentences within each cell type group should result in mixed perturbations
+        assert batches_with_multiple_perts > 0, (
+            f"Expected batches with multiple sentences to contain multiple perturbations "
+            f"(due to shuffling), but found {batches_with_multiple_perts} out of "
+            f"{batches_with_multiple_sentences} batches with multiple sentences. "
+            f"This suggests sentences may not be properly shuffled across perturbations."
+        )
+        
+        # Verify that a reasonable proportion of multi-sentence batches have multiple perturbations
+        # With shuffling, this should be a significant fraction
+        ratio = batches_with_multiple_perts / batches_with_multiple_sentences
+        assert ratio > 0.3, (
+            f"Expected at least 30% of batches with multiple sentences to have multiple perturbations, "
+            f"but found {batches_with_multiple_perts}/{batches_with_multiple_sentences} ({ratio:.1%}). "
+            f"This suggests sentences may not be properly shuffled across perturbations."
+        )
+
+    finally:
+        toml_path.unlink()
+
+
+def test_group_by_cell_line_sentences_shuffled_within_batch(synthetic_data):
+    """Test that sentences are shuffled within cell type groups before batching."""
+    root, _ = synthetic_data
+
+    config = {
+        "datasets": {"dataset1": "placeholder"},
+        "training": {"dataset1": "train"},
+    }
+
+    toml_path = create_toml_config(root, config)
+
+    try:
+        # Use realistic batch_size to ensure batches contain multiple sentences
+        batch_size = 64
+        cell_sentence_len = 20
+        dm = make_datamodule(
+            toml_path,
+            embed_key="X_hvg",
+            batch_size=batch_size,
+            control_pert="P0",
+            cell_sentence_len=cell_sentence_len,
+            group_by_cell_line=True,
+        )
+        dm.setup()
+
+        loader = dm.train_dataloader()
+        ds = loader.batch_sampler.dataset
+        sampler = loader.batch_sampler
+
+        # Check shuffling by examining the sentences directly (before they're flattened into batches)
+        # Sentences are grouped by cell type and shuffled within each group
+        # We can verify shuffling by checking that sentences from the same cell type
+        # are not in sorted order by perturbation
+        
+        # Group sentences by cell type
+        sentences_by_cell_type = {}
+        for sentence in sampler.sentences:
+            cell_type_code = sampler._get_cell_type_code_for_sentence(sentence)
+            if cell_type_code not in sentences_by_cell_type:
+                sentences_by_cell_type[cell_type_code] = []
+            sentences_by_cell_type[cell_type_code].append(sentence)
+        
+        # For each cell type, check that sentences are shuffled
+        # by verifying they're not in sorted order by perturbation
+        cell_types_with_shuffled_sentences = 0
+        for cell_type_code, sentences in sentences_by_cell_type.items():
+            if len(sentences) < 2:
+                continue
+            
+            # Get perturbation codes for each sentence
+            pert_codes_per_sentence = []
+            for sentence in sentences:
+                # Get perturbation code from first cell in sentence
+                first_cell_idx = sentence[0]
+                offset = 0
+                for subset in ds.datasets:
+                    if first_cell_idx < offset + len(subset):
+                        local = subset.indices[first_cell_idx - offset]
+                        cache = subset.dataset.metadata_cache
+                        pert_codes_per_sentence.append(cache.pert_codes[local])
+                        break
+                    offset += len(subset)
+            
+            # Check if sorted (would indicate no shuffling)
+            if len(pert_codes_per_sentence) > 1:
+                is_sorted = all(
+                    pert_codes_per_sentence[i] <= pert_codes_per_sentence[i + 1]
+                    for i in range(len(pert_codes_per_sentence) - 1)
+                )
+                if not is_sorted:
+                    cell_types_with_shuffled_sentences += 1
+        
+        # Verify that sentences are shuffled within cell type groups
+        # With multiple cell types and shuffled sentences, we should see non-sorted order
+        assert len(sentences_by_cell_type) > 0, "Expected sentences grouped by cell type"
+        
+        cell_types_with_multiple_sentences = sum(
+            1 for sentences in sentences_by_cell_type.values() 
+            if len(sentences) >= 2
+        )
+        
+        assert cell_types_with_multiple_sentences > 0, (
+            f"Expected cell types with multiple sentences, but found none. "
+            f"This suggests data distribution is unusual."
+        )
+        
+        # With shuffling, at least some cell types should have non-sorted sentence order
+        assert cell_types_with_shuffled_sentences > 0, (
+            f"Expected shuffled sentences within cell type groups, but found "
+            f"{cell_types_with_shuffled_sentences} cell types with shuffled order out of "
+            f"{cell_types_with_multiple_sentences} cell types with multiple sentences. "
+            f"This suggests sentences may not be shuffled."
+        )
+        
+        # Verify that a reasonable proportion of cell types show shuffling
+        ratio = cell_types_with_shuffled_sentences / cell_types_with_multiple_sentences
+        assert ratio > 0.5, (
+            f"Expected at least 50% of cell types with multiple sentences to show shuffled order, "
+            f"but found {cell_types_with_shuffled_sentences}/{cell_types_with_multiple_sentences} ({ratio:.1%}). "
+            f"This suggests sentences may not be properly shuffled."
+        )
+
+    finally:
+        toml_path.unlink()
+
+
+def test_group_by_cell_line_all_cells_included_in_batches(synthetic_data):
+    """Test that all cells from the dataset are included in at least one batch when group_by_cell_line=True.
+    
+    Note: This test only applies when drop_last=False (the default). When drop_last=True,
+    the last incomplete batch may be dropped, so some cells may not appear in any batch.
+    """
+    root, _ = synthetic_data
+
+    config = {
+        "datasets": {"dataset1": "placeholder", "dataset2": "placeholder"},
+        "training": {"dataset1": "train", "dataset2": "train"},
+    }
+
+    toml_path = create_toml_config(root, config)
+
+    try:
+        # Use drop_last=False (default) to ensure all cells are included
+        batch_size = 64
+        cell_sentence_len = 20
+        dm = make_datamodule(
+            toml_path,
+            embed_key="X_hvg",
+            batch_size=batch_size,
+            control_pert="P0",
+            cell_sentence_len=cell_sentence_len,
+            group_by_cell_line=True,
+            drop_last=False,  # Explicitly set to False to test complete coverage
+        )
+        dm.setup()
+
+        loader = dm.train_dataloader()
+        ds = loader.batch_sampler.dataset
+        sampler = loader.batch_sampler
+
+        # Verify drop_last is False
+        assert sampler.drop_last == False, "Test requires drop_last=False"
+
+        # Get all cells that should be in batches (all global indices in the dataset)
+        all_expected_cells = set()
+        global_offset = 0
+        for subset in ds.datasets:
+            for i in range(len(subset)):
+                all_expected_cells.add(global_offset + i)
+            global_offset += len(subset)
+
+        # Collect all cells that appear in batches
+        all_cells_in_batches = set()
+        batches = list(sampler)
+        for batch in batches:
+            all_cells_in_batches.update(batch)
+
+        # Verify that all expected cells appear in at least one batch
+        missing_cells = all_expected_cells - all_cells_in_batches
+        assert len(missing_cells) == 0, (
+            f"Expected all cells to appear in batches, but {len(missing_cells)} cells are missing. "
+            f"Total expected: {len(all_expected_cells)}, found in batches: {len(all_cells_in_batches)}. "
+            f"This suggests cells are being dropped when they shouldn't be (drop_last=False)."
+        )
+
+        # Also verify we don't have any extra cells (cells not in the dataset)
+        extra_cells = all_cells_in_batches - all_expected_cells
+        assert len(extra_cells) == 0, (
+            f"Found {len(extra_cells)} cells in batches that are not in the dataset. "
+            f"This suggests an indexing error."
+        )
+
+        # Verify counts match
+        assert len(all_cells_in_batches) == len(all_expected_cells), (
+            f"Cell count mismatch: expected {len(all_expected_cells)} cells, "
+            f"found {len(all_cells_in_batches)} cells in batches."
+        )
+
+    finally:
+        toml_path.unlink()
+
+
+def test_group_by_cell_line_backwards_compatibility(synthetic_data):
+    """Test that default behavior (group_by_cell_line=False) is unchanged."""
+    root, _ = synthetic_data
+
+    config = {
+        "datasets": {"dataset1": "placeholder", "dataset2": "placeholder"},
+        "training": {"dataset1": "train", "dataset2": "train"},
+    }
+
+    toml_path = create_toml_config(root, config)
+
+    try:
+        # Test with group_by_cell_line=False (default)
+        dm_false = make_datamodule(
+            toml_path,
+            embed_key="X_hvg",
+            batch_size=3,
+            control_pert="P0",
+            group_by_cell_line=False,
+        )
+        dm_false.setup()
+
+        # Test without specifying group_by_cell_line (should default to False)
+        dm_default = make_datamodule(
+            toml_path,
+            embed_key="X_hvg",
+            batch_size=3,
+            control_pert="P0",
+        )
+        dm_default.setup()
+
+        loader_false = dm_false.train_dataloader()
+        loader_default = dm_default.train_dataloader()
+
+        assert loader_false.batch_sampler.group_by_cell_line == False
+        assert loader_default.batch_sampler.group_by_cell_line == False
+
+        # Both should generate batches (may have different ordering due to shuffling)
+        batches_false = list(loader_false.batch_sampler)
+        batches_default = list(loader_default.batch_sampler)
+
+        assert len(batches_false) > 0, "Should generate batches"
+        assert len(batches_default) > 0, "Should generate batches"
+
+        # The key test is that group_by_cell_line=False doesn't enforce
+        # single cell type per batch (unlike when True)
+        # We verify this by comparing behavior: when True, batches are restricted
+        # to single cell type; when False, there's no such restriction
+        
+        # Compare with group_by_cell_line=True to show the difference
+        dm_true = make_datamodule(
+            toml_path,
+            embed_key="X_hvg",
+            batch_size=3,
+            control_pert="P0",
+            group_by_cell_line=True,
+        )
+        dm_true.setup()
+        loader_true = dm_true.train_dataloader()
+        batches_true = list(loader_true.batch_sampler)
+        
+        # Both should generate batches
+        assert len(batches_true) > 0, "Should generate batches with group_by_cell_line=True"
+        
+        # The key difference: with group_by_cell_line=True, each batch is restricted
+        # to a single cell type. With False, there's no such restriction.
+        # We've already verified this in test_group_by_cell_line_batches_contain_single_cell_line
+        # Here we just verify the parameter is correctly set and defaults work
+
+    finally:
+        toml_path.unlink()
+
+
+def test_group_by_cell_line_sampler_helper_methods(synthetic_data):
+    """Test the helper methods for getting cell type codes."""
+    root, _ = synthetic_data
+
+    config = {
+        "datasets": {"dataset1": "placeholder"},
+        "training": {"dataset1": "train"},
+    }
+
+    toml_path = create_toml_config(root, config)
+
+    try:
+        dm = make_datamodule(
+            toml_path,
+            embed_key="X_hvg",
+            batch_size=3,
+            control_pert="P0",
+            group_by_cell_line=True,
+        )
+        dm.setup()
+
+        loader = dm.train_dataloader()
+        ds = loader.batch_sampler.dataset
+        sampler = loader.batch_sampler
+
+        # Test _get_cell_type_code_for_global_idx
+        # Get a global index from the dataset
+        if len(ds.datasets) > 0 and len(ds.datasets[0]) > 0:
+            global_idx = 0
+            cell_type_code = sampler._get_cell_type_code_for_global_idx(global_idx)
+            assert isinstance(cell_type_code, (int, np.integer)), (
+                "Cell type code should be an integer"
+            )
+
+            # Test _get_cell_type_code_for_sentence
+            # Get a sentence from the sampler
+            if len(sampler.sentences) > 0:
+                sentence = sampler.sentences[0]
+                sentence_cell_type_code = sampler._get_cell_type_code_for_sentence(sentence)
+                assert isinstance(sentence_cell_type_code, (int, np.integer)), (
+                    "Sentence cell type code should be an integer"
+                )
+
+                # Verify that all cells in the sentence have the same cell type
+                for gidx in sentence:
+                    ct_code = sampler._get_cell_type_code_for_global_idx(gidx)
+                    assert ct_code == sentence_cell_type_code, (
+                        f"All cells in sentence should have same cell type code. "
+                        f"Expected {sentence_cell_type_code}, got {ct_code} for index {gidx}"
+                    )
+
+        # Test error handling
+        with pytest.raises(ValueError, match="out of range"):
+            sampler._get_cell_type_code_for_global_idx(999999)
+
+        with pytest.raises(ValueError, match="Empty sentence"):
+            sampler._get_cell_type_code_for_sentence([])
+
+    finally:
+        toml_path.unlink()
