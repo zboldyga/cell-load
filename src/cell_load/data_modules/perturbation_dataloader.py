@@ -116,7 +116,7 @@ class PerturbationDataModule(LightningDataModule):
 
         logger.info(
             f"Initializing DataModule: batch_size={batch_size}, workers={num_workers}, "
-            f"random_seed={random_seed}"
+            f"random_seed={random_seed}, group_by_cell_line={group_by_cell_line}"
         )
 
         # Mapping strategy

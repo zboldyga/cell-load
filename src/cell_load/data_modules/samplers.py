@@ -167,6 +167,9 @@ class PerturbationBatchSampler(Sampler):
         if current_batch and not self.drop_last:
             all_batches.append(current_batch)
 
+        # Log batch statistics
+        self._log_batch_statistics(all_batches)
+
         return all_batches
 
     def _create_batches_grouped_by_cell_line(self, rank_sentences: list[list[int]]) -> list[list[int]]:
@@ -238,6 +241,9 @@ class PerturbationBatchSampler(Sampler):
                 f"{num_full} full sentences, {num_partial} partial sentences."
             )
 
+        # Log batch statistics
+        self._log_batch_statistics(all_batches)
+
         return all_batches
 
     def _get_rank_sentences(self) -> list[list[int]]:
@@ -296,6 +302,78 @@ class PerturbationBatchSampler(Sampler):
                 return cache.cell_type_codes[local_idx]
             current_offset += len(subset)
         raise ValueError(f"Global index {global_idx} out of range")
+
+    def _get_pert_code_for_global_idx(self, global_idx: int) -> int:
+        """
+        Get the perturbation code for a global index.
+
+        Args:
+            global_idx: Global index across all datasets
+
+        Returns:
+            Perturbation code (integer)
+        """
+        # Find which subset this global index belongs to
+        current_offset = 0
+        for subset in self.dataset.datasets:
+            if global_idx < current_offset + len(subset):
+                # Convert global index to local index
+                local_idx = subset.indices[global_idx - current_offset]
+                # Get the metadata cache for this dataset
+                base_dataset: PerturbationDataset = subset.dataset
+                cache: H5MetadataCache = self.metadata_caches[base_dataset.h5_path]
+                # Return perturbation code
+                return cache.pert_codes[local_idx]
+            current_offset += len(subset)
+        raise ValueError(f"Global index {global_idx} out of range")
+
+    def _log_batch_statistics(self, all_batches: list[list[int]]) -> None:
+        """
+        Log concise batch statistics: unique perturbations per batch and batch lengths.
+
+        Args:
+            all_batches: List of batches, where each batch is a list of global indices
+        """
+        if not all_batches:
+            return
+
+        # Compute unique perturbations per batch
+        unique_perts_per_batch = []
+        batch_lengths = []
+
+        for batch in all_batches:
+            if not batch:
+                continue
+
+            batch_lengths.append(len(batch))
+
+            # Get unique perturbation codes in this batch
+            pert_codes = set()
+            for global_idx in batch:
+                pert_code = self._get_pert_code_for_global_idx(global_idx)
+                pert_codes.add(pert_code)
+
+            unique_perts_per_batch.append(len(pert_codes))
+
+        if not unique_perts_per_batch:
+            return
+
+        # Compute statistics
+        batch_lengths_arr = np.array(batch_lengths)
+        unique_perts_arr = np.array(unique_perts_per_batch)
+
+        batch_len_median = np.median(batch_lengths_arr)
+        batch_len_min = np.min(batch_lengths_arr)
+        batch_len_max = np.max(batch_lengths_arr)
+
+        pert_median = np.median(unique_perts_arr)
+        pert_min = np.min(unique_perts_arr)
+        pert_max = np.max(unique_perts_arr)
+
+        logger.info(
+            f"Batch stats: lengths median/min/max = {batch_len_median:.0f}/{batch_len_min}/{batch_len_max}, "
+            f"unique perts per batch median/min/max = {pert_median:.0f}/{pert_min}/{pert_max}"
+        )
 
     def _get_cell_type_code_for_sentence(self, sentence: list[int]) -> int:
         """
