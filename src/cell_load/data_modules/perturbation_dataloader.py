@@ -379,6 +379,11 @@ class PerturbationDataModule(LightningDataModule):
 
         batch_size = batch_size or (1 if test else self.batch_size)
 
+        logger.info(
+            f"Creating dataloader with group_by_cell_line={self.group_by_cell_line} "
+            f"(batch_size={batch_size}, cell_sentence_len={self.cell_sentence_len})"
+        )
+
         sampler = PerturbationBatchSampler(
             dataset=ds,
             batch_size=batch_size,

@@ -62,6 +62,10 @@ class PerturbationBatchSampler(Sampler):
         self.drop_last = drop_last
         self.group_by_cell_line = group_by_cell_line
 
+        logger.info(
+            f"PerturbationBatchSampler initialized with group_by_cell_line={group_by_cell_line}"
+        )
+
         # Setup distributed settings if distributed mode is enabled.
         self.distributed = False
         self.num_replicas = 1
