@@ -13,6 +13,7 @@ from lightning.pytorch import LightningDataModule
 from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
 
+from .. import __version__
 from ..config import ExperimentConfig
 from ..dataset import MetadataConcatDataset, PerturbationDataset
 from ..mapping_strategies import BatchMappingStrategy, RandomMappingStrategy
@@ -114,6 +115,7 @@ class PerturbationDataModule(LightningDataModule):
         self.store_raw_basal = kwargs.get("store_raw_basal", False)
         self.barcode = kwargs.get("barcode", False)
 
+        logger.info(f"Initializing PerturbationDataModule (cell-load v{__version__})")
         logger.info(
             f"Initializing DataModule: batch_size={batch_size}, workers={num_workers}, "
             f"random_seed={random_seed}, group_by_cell_line={group_by_cell_line}"
