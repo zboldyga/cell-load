@@ -53,6 +53,7 @@ class PerturbationDataModule(LightningDataModule):
         cache_perturbation_control_pairs: bool = False,
         drop_last: bool = False,
         group_by_cell_line: bool = False,
+        shuffle_batches_per_epoch: bool = False,
         **kwargs,  # missing perturbation_features_file  and store_raw_basal for backwards compatibility
     ):
         """
@@ -73,6 +74,7 @@ class PerturbationDataModule(LightningDataModule):
             cache_perturbation_control_pairs: If True cache perturbation-control pairs at the start of training and reuse them.
             drop_last: Whether to drop the last sentence set if it is smaller than cell_sentence_len
             group_by_cell_line: If True, batches will only contain sentences from the same cell line
+            shuffle_batches_per_epoch: If True, sentences are reshuffled each epoch before creating batches, ensuring unique batch compositions each epoch
         """
         super().__init__()
 
@@ -106,6 +108,7 @@ class PerturbationDataModule(LightningDataModule):
         self.should_yield_control_cells = should_yield_control_cells
         self.cache_perturbation_control_pairs = cache_perturbation_control_pairs
         self.group_by_cell_line = group_by_cell_line
+        self.shuffle_batches_per_epoch = shuffle_batches_per_epoch
 
         # Optional behaviors
         self.map_controls = kwargs.get("map_controls", True)
@@ -118,7 +121,8 @@ class PerturbationDataModule(LightningDataModule):
         logger.info(f"Initializing PerturbationDataModule (cell-load v{__version__})")
         logger.info(
             f"Initializing DataModule: batch_size={batch_size}, workers={num_workers}, "
-            f"random_seed={random_seed}, group_by_cell_line={group_by_cell_line}"
+            f"random_seed={random_seed}, group_by_cell_line={group_by_cell_line}, "
+            f"shuffle_batches_per_epoch={shuffle_batches_per_epoch}"
         )
 
         # Mapping strategy
@@ -382,7 +386,8 @@ class PerturbationDataModule(LightningDataModule):
         batch_size = batch_size or (1 if test else self.batch_size)
 
         logger.info(
-            f"Creating dataloader with group_by_cell_line={self.group_by_cell_line} "
+            f"Creating dataloader with group_by_cell_line={self.group_by_cell_line}, "
+            f"shuffle_batches_per_epoch={self.shuffle_batches_per_epoch} "
             f"(batch_size={batch_size}, cell_sentence_len={self.cell_sentence_len})"
         )
 
@@ -394,6 +399,7 @@ class PerturbationDataModule(LightningDataModule):
             test=test,
             use_batch=use_batch,
             group_by_cell_line=self.group_by_cell_line,
+            shuffle_batches_per_epoch=self.shuffle_batches_per_epoch,
         )
 
         return DataLoader(

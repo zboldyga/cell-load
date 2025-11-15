@@ -36,6 +36,7 @@ class PerturbationBatchSampler(Sampler):
         seed: int = 0,
         epoch: int = 0,
         group_by_cell_line: bool = False,
+        shuffle_batches_per_epoch: bool = False,
     ):
         logger.info(
             "Creating perturbation batch sampler with metadata caching (using codes)..."
@@ -61,9 +62,11 @@ class PerturbationBatchSampler(Sampler):
         self.cell_sentence_len = cell_sentence_len
         self.drop_last = drop_last
         self.group_by_cell_line = group_by_cell_line
+        self.shuffle_batches_per_epoch = shuffle_batches_per_epoch
 
         logger.info(
-            f"PerturbationBatchSampler initialized with group_by_cell_line={group_by_cell_line}"
+            f"PerturbationBatchSampler initialized with group_by_cell_line={group_by_cell_line}, "
+            f"shuffle_batches_per_epoch={shuffle_batches_per_epoch}"
         )
 
         # Setup distributed settings if distributed mode is enabled.
@@ -78,6 +81,12 @@ class PerturbationBatchSampler(Sampler):
             logger.info(
                 f"Distributed mode enabled. World size: {self.num_replicas}, rank: {self.rank}."
             )
+            if self.shuffle_batches_per_epoch:
+                logger.warning(
+                    "shuffle_batches_per_epoch=True is not supported in distributed mode. "
+                    "This feature will be disabled."
+                )
+                self.shuffle_batches_per_epoch = False
 
         # Create caches for all unique H5 files.
         self.metadata_caches = {}
@@ -454,6 +463,7 @@ class PerturbationBatchSampler(Sampler):
     def _create_sentences(self) -> list[list[int]]:
         """
         Process each subset sequentially (across all datasets) and combine the batches.
+        If shuffle_batches_per_epoch is True, sentences are shuffled using epoch-based seed.
         """
         global_offset = 0
         all_batches = []
@@ -461,7 +471,13 @@ class PerturbationBatchSampler(Sampler):
             subset_batches = self._process_subset(global_offset, subset)
             all_batches.extend(subset_batches)
             global_offset += len(subset)
-        np.random.shuffle(all_batches)
+        
+        # Shuffle sentences using epoch-based seed if shuffle_batches_per_epoch is enabled
+        if self.shuffle_batches_per_epoch:
+            rng = np.random.RandomState(self.seed + self.epoch)
+            rng.shuffle(all_batches)
+        else:
+            np.random.shuffle(all_batches)
 
         return all_batches
 
@@ -479,10 +495,14 @@ class PerturbationBatchSampler(Sampler):
         Set the epoch for this sampler.
 
         This ensures all replicas use a different random ordering for each epoch.
+        If shuffle_batches_per_epoch is True, sentences are reshuffled before recreating batches.
 
         Args:
             epoch: Epoch number
         """
         self.epoch = epoch
-        # Recreate batches for new epoch (sentences remain the same)
+        # If shuffle_batches_per_epoch is enabled, reshuffle sentences before recreating batches
+        if self.shuffle_batches_per_epoch:
+            self.sentences = self._create_sentences()
+        # Recreate batches for new epoch
         self.batches = self._create_batches()
