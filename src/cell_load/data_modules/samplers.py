@@ -482,8 +482,10 @@ class PerturbationBatchSampler(Sampler):
         return all_batches
 
     def __iter__(self) -> Iterator[list[int]]:
-        # Shuffle the order of batches each time we iterate in non-distributed mode.
-        if not self.distributed:
+        # When shuffle_batches_per_epoch is enabled, rely on set_epoch() to recreate batches
+        # with epoch-based shuffling. Otherwise, recreate batches here for backward compatibility.
+        # In distributed mode, batches are created once and reused.
+        if not self.distributed and not self.shuffle_batches_per_epoch:
             self.batches = self._create_batches()
         yield from self.batches
 
